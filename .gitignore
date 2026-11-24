@@ -1,0 +1,27 @@
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# IDE
+.vscode/
+.idea/
+
+# Environment variables and secrets
+.env
+.env.*
+
+# Generated files
+*.log
+.DS_Store
+
+# External repositories and assets
+external/
+
+# Model weights and datasets
+*.pt
+*.pth
+*.onnx
+datasets/
