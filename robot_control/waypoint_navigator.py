@@ -7,17 +7,25 @@ def quat_to_yaw(q):
     cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
     return float(np.arctan2(siny_cosp, cosy_cosp))
 
+def normalize_angle(angle):
+    return float((angle + np.pi) % (2.0 * np.pi) - np.pi)
+
+
 class WaypointNavigator:
     def __init__(self, waypoints, pos_tolerance=0.25, yaw_tolerance=0.20):
         self.waypoints = waypoints
         self.current_idx = 0
         self.pos_tol = pos_tolerance
         self.yaw_tol = yaw_tolerance
+        self.turn_tol = min(0.08, yaw_tolerance)
         self.pause_start_time = None
         self.pause_duration = 3.0
         self.is_finished = False
         self._last_vx = 0.0
         self._last_yaw = 0.0
+        self.phase = "APPROACH"
+        self._phase_timer = None
+        self._target_depart_yaw = None
 
     def _send_smoothed_velocity(self, controller, target_vx, target_yaw):
         max_dvx = 0.03
@@ -28,10 +36,28 @@ class WaypointNavigator:
         self._last_yaw = yaw
         set_velocity(controller, vx=vx, vy=0.0, yaw=yaw)
 
+    def _rotate_in_place(self, controller, target_yaw, current_yaw, tol):
+        yaw_err = normalize_angle(target_yaw - current_yaw)
+        if abs(yaw_err) > tol:
+            yaw_mag = float(np.clip(abs(yaw_err) * 1.2, 0.35, 0.60))
+            yaw_cmd = float(np.sign(yaw_err) * yaw_mag)
+            self._send_smoothed_velocity(controller, 0.0, yaw_cmd)
+            return False
+        self._send_smoothed_velocity(controller, 0.0, 0.0)
+        return True
+
+    def _advance_waypoint(self):
+        self.pause_start_time = None
+        self._phase_timer = None
+        self._target_depart_yaw = None
+        self.current_idx += 1
+        self.phase = "APPROACH"
+
     def update(self, controller, elapsed_time):
         if self.is_finished or self.current_idx >= len(self.waypoints):
             self._send_smoothed_velocity(controller, 0.0, 0.0)
             self.is_finished = True
+            self.phase = "FINISHED"
             return
 
         wp = self.waypoints[self.current_idx]
@@ -41,35 +67,62 @@ class WaypointNavigator:
 
         dx = wp["x"] - current_x
         dy = wp["y"] - current_y
-        dist = np.hypot(dx, dy)
+        dist = float(np.hypot(dx, dy))
 
-        if self.pause_start_time is not None:
-            self._send_smoothed_velocity(controller, 0.0, 0.0)
-            if elapsed_time - self.pause_start_time >= self.pause_duration:
-                print(f"[Navigator] Checkpoint completed: {wp['name']}. Moving to next...")
-                self.pause_start_time = None
-                self.current_idx += 1
+        if self.phase == "APPROACH":
+            if dist <= self.pos_tol:
+                self._send_smoothed_velocity(controller, 0.0, 0.0)
+                self.phase = "STOP_BEFORE_INSPECT"
+                self._phase_timer = elapsed_time
+                return
+            vx_cmd = float(np.clip(0.6 * dist, 0.28, 0.45))
+            self._send_smoothed_velocity(controller, vx_cmd, 0.0)
             return
 
-        if dist > self.pos_tol:
-            target_heading = np.arctan2(dy, dx)
-            heading_err = (target_heading - current_yaw + np.pi) % (2 * np.pi) - np.pi
+        if self.phase == "STOP_BEFORE_INSPECT":
+            self._send_smoothed_velocity(controller, 0.0, 0.0)
+            if abs(self._last_vx) < 1e-3 and elapsed_time - self._phase_timer >= 0.4:
+                if wp.get("inspect", True):
+                    self.phase = "FACE_STATION"
+                else:
+                    self.phase = "FACE_FINAL"
+            return
 
-            if abs(heading_err) > 0.45:
-                yaw_cmd = float(np.clip(1.2 * heading_err, -0.6, 0.6))
-                self._send_smoothed_velocity(controller, 0.0, yaw_cmd)
-            else:
-                heading_scale = max(0.0, 1.0 - abs(heading_err) / 0.45)
-                vx_cmd = float(np.clip(0.6 * dist, 0.28, 0.45)) * heading_scale
-                yaw_cmd = float(np.clip(1.0 * heading_err, -0.4, 0.4))
-                self._send_smoothed_velocity(controller, vx_cmd, yaw_cmd)
-        else:
-            final_yaw_err = (wp["yaw"] - current_yaw + np.pi) % (2 * np.pi) - np.pi
-            if abs(final_yaw_err) > self.yaw_tol:
-                yaw_mag = float(np.clip(abs(final_yaw_err) * 1.2, 0.35, 0.6))
-                yaw_cmd = float(np.sign(final_yaw_err) * yaw_mag)
-                self._send_smoothed_velocity(controller, 0.0, yaw_cmd)
-            else:
-                self._send_smoothed_velocity(controller, 0.0, 0.0)
-                print(f"[Navigator] ARRIVED at Checkpoint {self.current_idx + 1}: {wp['name']}! Pausing {self.pause_duration}s for inspection...")
-                self.pause_start_time = elapsed_time
+        if self.phase in ("FACE_STATION", "FACE_FINAL"):
+            if self._rotate_in_place(controller, wp["yaw"], current_yaw, self.yaw_tol):
+                if self.phase == "FACE_STATION":
+                    print(f"[Navigator] ARRIVED at {wp['name']}! Pausing {self.pause_duration}s for inspection...")
+                    self.pause_start_time = elapsed_time
+                    self.phase = "INSPECT_PAUSE"
+                else:
+                    self._advance_waypoint()
+            return
+
+        if self.phase == "INSPECT_PAUSE":
+            self._send_smoothed_velocity(controller, 0.0, 0.0)
+            if elapsed_time - self.pause_start_time >= self.pause_duration:
+                print(f"[Navigator] Inspection complete at {wp['name']}.")
+                if self.current_idx + 1 < len(self.waypoints):
+                    next_wp = self.waypoints[self.current_idx + 1]
+                    self._target_depart_yaw = float(np.arctan2(next_wp["y"] - wp["y"], next_wp["x"] - wp["x"]))
+                    self.phase = "ROTATE_TO_NEXT"
+                else:
+                    self._advance_waypoint()
+            return
+
+        if self.phase == "ROTATE_TO_NEXT":
+            if self._rotate_in_place(controller, self._target_depart_yaw, current_yaw, self.turn_tol):
+                self._phase_timer = elapsed_time
+                self.phase = "SETTLE_AFTER_TURN"
+            return
+
+        if self.phase == "SETTLE_AFTER_TURN":
+            self._send_smoothed_velocity(controller, 0.0, 0.0)
+            if abs(self._last_yaw) < 1e-3 and elapsed_time - self._phase_timer >= 0.3:
+                yaw_err = normalize_angle(self._target_depart_yaw - current_yaw)
+                if abs(yaw_err) <= self.yaw_tol:
+                    print(f"[Navigator] Orientation verified ({np.degrees(current_yaw):.1f} deg). Resuming forward walk...")
+                    self._advance_waypoint()
+                else:
+                    self.phase = "ROTATE_TO_NEXT"
+            return

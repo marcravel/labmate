@@ -22,6 +22,15 @@ PATROL_ROUTE = [
     {"name": "Home Base",                    "x": 0.00, "y": 0.00, "yaw": 3.14},
 ]
 
+# Experimental Hackathon Lab Demo Route
+LAB_DEMO_ROUTE = [
+    {"name": "Home",         "x": 0.0, "y": 0.0, "yaw": 0.0,    "inspect": False},
+    {"name": "Checkpoint 1", "x": 3.8, "y": 0.0, "yaw": 0.0,    "inspect": True},
+    {"name": "Checkpoint 2", "x": 3.8, "y": 1.8, "yaw": 1.5708, "inspect": True},
+    {"name": "Checkpoint 3", "x": 0.0, "y": 1.8, "yaw": 3.1416, "inspect": True},
+    {"name": "Return Home",  "x": 0.0, "y": 0.0, "yaw": 0.0,    "inspect": False},
+]
+
 def main():
     print("=" * 60)
     print("  LabMate - Autonomous Waypoint Navigation (Milestone 3)")
@@ -31,12 +40,12 @@ def main():
     task_cfg.policy.device = "cpu"
 
     controller = LabMateController(task_cfg)
-    navigator = WaypointNavigator(PATROL_ROUTE)
+    navigator = WaypointNavigator(LAB_DEMO_ROUTE)
 
     # Attach autonomous navigator
     controller.set_navigator(navigator.update)
 
-    print(f"Patrol initialized with {len(PATROL_ROUTE)} checkpoints.")
+    print(f"Patrol initialized with {len(LAB_DEMO_ROUTE)} checkpoints.")
     print("Launching autonomous patrol...")
     controller.run()
 
