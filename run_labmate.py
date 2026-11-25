@@ -13,41 +13,40 @@ for _, module_name, is_pkg in pkgutil.walk_packages(tasks.__path__, tasks.__name
 
 from booster_deploy.utils.registry import get_task
 from robot_control.labmate_controller import LabMateController
+from robot_control.route_graph import RouteGraph
 from robot_control.waypoint_navigator import WaypointNavigator
 
-# Define Lab Inspection Route
-PATROL_ROUTE = [
-    {"name": "Station 1 (Chemical Storage)", "x": 1.20, "y": 0.00, "yaw": 0.00},
-    {"name": "Station 2 (Lab Bench)",         "x": 1.20, "y": 0.80, "yaw": 1.57},
-    {"name": "Home Base",                    "x": 0.00, "y": 0.00, "yaw": 3.14},
-]
+# Importing this registers the "labmate_inspection" task: the stock k1_walk
+# config with the robot spawned inside the LabMate laboratory scene.
+from shared.task_cfg import TASK_NAME
 
-# Experimental Hackathon Lab Demo Route
-LAB_DEMO_ROUTE = [
-    {"name": "Home",         "x": 0.0, "y": 0.0, "yaw": 0.0,    "inspect": False},
-    {"name": "Checkpoint 1", "x": 3.8, "y": 0.0, "yaw": 0.0,    "inspect": True},
-    {"name": "Checkpoint 2", "x": 3.8, "y": 1.8, "yaw": 1.5708, "inspect": True},
-    {"name": "Checkpoint 3", "x": 0.0, "y": 1.8, "yaw": 3.1416, "inspect": True},
-    {"name": "Return Home",  "x": 0.0, "y": 0.0, "yaw": 0.0,    "inspect": False},
-]
 
 def main():
     print("=" * 60)
-    print("  LabMate - Autonomous Waypoint Navigation (Milestone 3)")
+    print("  LabMate - Autonomous Laboratory Inspection Patrol")
     print("=" * 60)
 
-    task_cfg = get_task("k1_walk")
+    task_cfg = get_task(TASK_NAME)
     task_cfg.policy.device = "cpu"
 
     controller = LabMateController(task_cfg)
-    navigator = WaypointNavigator(LAB_DEMO_ROUTE)
 
-    # Attach autonomous navigator
+    # The route is read from the scene's own nav_/inspect_ sites, so it can only
+    # contain positions the laboratory model declares and edges that
+    # tests/check_scene.py has swept for clearance.
+    graph = RouteGraph(controller.mj_model)
+    route = graph.patrol_route()
+
+    navigator = WaypointNavigator(route)
     controller.set_navigator(navigator.update)
 
-    print(f"Patrol initialized with {len(LAB_DEMO_ROUTE)} checkpoints.")
+    stations = [wp["name"] for wp in route if wp["inspect"]]
+    print(f"Route: {len(route)} waypoints, {len(stations)} inspection stations")
+    for name in stations:
+        print(f"  - {name}")
     print("Launching autonomous patrol...")
     controller.run()
+
 
 if __name__ == "__main__":
     main()

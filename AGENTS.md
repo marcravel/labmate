@@ -17,14 +17,22 @@ The codebase has two distinct parts:
 1. **Official Booster Deploy framework** (`external/booster_deploy/`, `external/booster_assets/`) — third-party code. Treat as a protected dependency.
 2. **Custom LabMate application layer** (`robot_control/`, `run_labmate.py`) — the only code agents should write or modify during normal development.
 
-The working system consists of exactly **four custom Python files** on top of Booster Deploy:
+The working system consists of these custom files on top of Booster Deploy:
 
-- `run_labmate.py`
-- `robot_control/labmate_controller.py`
-- `robot_control/velocity_interface.py`
-- `robot_control/waypoint_navigator.py`
+| File | Role |
+|---|---|
+| `run_labmate.py` | Entry point. Wiring only. |
+| `robot_control/labmate_controller.py` | Controller subclass. Hook points only. |
+| `robot_control/velocity_interface.py` | The only sanctioned path for velocity commands. |
+| `robot_control/waypoint_navigator.py` | Patrol state machine. |
+| `robot_control/route_graph.py` | Navigation graph read from the MJCF. Owns `ROUTE_EDGES`. |
+| `shared/task_cfg.py` | Registers `labmate_inspection`; overrides `robot.mjcf_path`. |
+| `simulation/scenes/labmate_scene.xml` | Scene entry point. This is the model that loads. |
+| `simulation/scenes/lab_environment.xml` | The laboratory: static bodies, geoms, nav/inspect sites. |
+| `tests/check_scene.py` | Static geometric validation of the scene. |
+| `tests/test_route_graph.py` | Route planning stays on validated edges. |
 
-Everything else (`simulation/`, `backend/`, `dashboard/`, `perception/`, `shared/`, `tests/`) is currently empty. Do not assume any planned module exists.
+`backend/`, `dashboard/`, `perception/`, `simulation/models/` are still empty. Do not assume any planned module exists — verify first.
 
 ---
 
@@ -40,8 +48,12 @@ These constraints must not be violated under any circumstances.
 6. **Do not introduce unnecessary dependencies.** Core runtime dependencies are MuJoCo, PyTorch, and NumPy. Add new packages only when strictly required and document them.
 7. **Do not perform large architectural refactoring during the hackathon.** Extend the existing hook-and-callback pattern. Do not restructure the inheritance hierarchy or the main control loop.
 8. **Do not change existing public interfaces** (`set_velocity`, `stop_robot`, `get_robot_pose`, the navigator callable signature) unless a change is necessary, explicitly requested, and all callers are updated.
-9. **Do not assume a planned subsystem is implemented.** `backend/`, `dashboard/`, `perception/`, `simulation/scenes/`, `shared/`, and `tests/` are empty. Verify before referencing.
+9. **Do not assume a planned subsystem is implemented.** `backend/`, `dashboard/`, `perception/` and `simulation/models/` are empty. Verify before referencing.
 10. **Do not commit or push changes** unless a human developer explicitly requests it.
+11. **Never place a LabMate file inside `external/`.** `.gitignore` excludes `external/`, so anything put there is untracked and will be lost on a re-clone or cleanup. The laboratory scene lives in `simulation/scenes/`; load it by overriding `robot.mjcf_path` in a LabMate config subclass, never by editing a Booster file.
+12. **Run `tests/check_scene.py` after any change to `simulation/scenes/`.** It is the guard on the project's central invariant — that the laboratory adds no robot state, so the official policy still sees the model it was trained on. Never weaken its equality assertions to make a change pass.
+13. **Do not hand-write waypoint coordinates.** Routes come from `RouteGraph`, which reads the model's own sites. A hand-typed route once put a waypoint inside the central table. If a new position is needed, add a site to the MJCF and an edge to `ROUTE_EDGES`, then re-run both test scripts.
+14. **Do not remove the closed-loop heading correction in the APPROACH phase.** It was verified that without it the robot walks off course, misses waypoints and pushes into a wall indefinitely.
 
 ---
 
@@ -51,11 +63,19 @@ This table identifies the actual file, class, and function responsible for each 
 
 | Responsibility | File | Class / Function | Key Parameters |
 |---|---|---|---|
-| **Application entry point** | `run_labmate.py` | `main()` | `PATROL_ROUTE` list of `{name, x, y, yaw}` dicts |
-| **Task registration** | `external/booster_deploy/booster_deploy/utils/registry.py` | `register_task()` / `get_task()` | `name="k1_walk"` |
+| **Application entry point** | `run_labmate.py` | `main()` | Wiring only. The route comes from `RouteGraph`; no coordinates are written here. |
+| **Task registration** | `external/booster_deploy/booster_deploy/utils/registry.py` | `register_task()` / `get_task()` | `name="k1_walk"` (stock), `name="labmate_inspection"` (LabMate) |
+| **LabMate task config** | `shared/task_cfg.py` | `LabMateInspectionTaskCfg` | Overrides only `robot.mjcf_path` → `LAB_SCENE_PATH`. Everything else inherited. |
+| **Scene composition** | `simulation/scenes/labmate_scene.xml` | — | Includes `K1_22dof.xml` first, then `lab_environment.xml`; re-points `meshdir`. Robot must come first. |
+| **Laboratory geometry** | `simulation/scenes/lab_environment.xml` | — | 15 static bodies, 197 geoms, 23 sites. `lab_vis` = visual, `lab_col` = collision. No joints, no DOF. |
+| **Navigation graph** | `robot_control/route_graph.py` | `RouteGraph.__init__()` | Reads `nav_*` / `inspect_*` sites from `mj_model`. Heading from the site quaternion. |
+| **Route connectivity** | `robot_control/route_graph.py` | `ROUTE_EDGES` | 16 undirected edges. **Single source of truth** — `tests/check_scene.py` imports it. |
+| **Route planning** | `robot_control/route_graph.py` | `plan()` / `route()` / `patrol_route()` | BFS. `DEFAULT_STATION_ORDER` gives the perimeter round. |
+| **Scene validation** | `tests/check_scene.py` | — | Robot arrays unchanged; site and route clearance. Run after any scene change. |
+| **Route validation** | `tests/test_route_graph.py` | — | Generated routes use only validated edges and model positions. |
 | **Task configuration** | `external/booster_deploy/tasks/locomotion/robots/k1/__init__.py` | `K1WalkTaskCfg` | `vel_command`, `policy`, `robot` sub-configs |
 | **K1 joint specification** | `external/booster_deploy/booster_deploy/robots/k1.py` | `K1_CFG` (RobotCfg) | 22 joint names, stiffness, damping, effort limits, `mjcf_path` |
-| **MuJoCo model loading** | `external/booster_deploy/booster_deploy/controllers/mujoco_controller.py` | `MujocoController.__init__()` | `cfg.robot.mjcf_path` → `K1_22dof.xml` |
+| **MuJoCo model loading** | `external/booster_deploy/booster_deploy/controllers/mujoco_controller.py` | `MujocoController.__init__()` | `cfg.robot.mjcf_path` → `simulation/scenes/labmate_scene.xml` |
 | **Physics initialization** | `external/booster_deploy/booster_deploy/controllers/mujoco_controller.py` | `MujocoController.__init__()` | `physics_dt=0.002 s`, `decimation=10`, `init_pos=[0,0,0.6]` |
 | **State read (MuJoCo → tensors)** | `external/booster_deploy/booster_deploy/controllers/mujoco_controller.py` | `MujocoController.update_state()` | reads `mj_data.qpos`, `mj_data.qvel` → `robot.data` |
 | **Policy checkpoint loading** | `external/booster_deploy/tasks/locomotion/locomotion.py` | `LocomotionPolicy.__init__()` | `cfg.checkpoint_path`, `use_actor_module=True`, `device="cpu"` |
@@ -73,6 +93,7 @@ This table identifies the actual file, class, and function responsible for each 
 | **Stop robot** | `robot_control/velocity_interface.py` | `stop_robot(controller)` | Zeros all three velocity axes |
 | **Read robot pose** | `robot_control/velocity_interface.py` | `get_robot_pose(controller)` | Returns `(pos_np[3], quat_np[4])` from `robot.data.root_pos_w / root_quat_w` |
 | **Waypoint patrol logic** | `robot_control/waypoint_navigator.py` | `WaypointNavigator.update(controller, elapsed)` | `pos_tol=0.25 m`, `yaw_tol=0.20 rad`, `pause_duration=3.0 s` |
+| **Approach heading control** | `robot_control/waypoint_navigator.py` | `WaypointNavigator.update()`, APPROACH phase | `heading_gain=1.1`, `realign_tol=0.35 rad`, `yaw_rate_max=0.45 rad/s`. Required: without it the robot walks off course and never recovers. |
 | **Velocity command object** | `external/booster_deploy/booster_deploy/controllers/base_controller.py` | `VelocityCommand` | `lin_vel_x`, `lin_vel_y`, `ang_vel_yaw` (float attributes) |
 | **Robot state tensors** | `external/booster_deploy/booster_deploy/controllers/base_controller.py` | `RobotData` | `joint_pos`, `joint_vel`, `root_pos_w`, `root_quat_w`, `root_ang_vel_b` |
 | **Configuration dataclasses** | `external/booster_deploy/booster_deploy/controllers/controller_cfg.py` | Multiple `@configclass` | `ControllerCfg`, `PolicyCfg`, `RobotCfg`, `VelocityCommandCfg`, `MujocoControllerCfg` |
@@ -170,17 +191,22 @@ Do not submit changes that touch more than one concern at a time. If a task requ
 ### Core LabMate application code — agents write here
 
 ```
-robot_control/labmate_controller.py    ← Hook points only. Add new hooks cautiously.
+robot_control/labmate_controller.py   ← Hook points only. Add new hooks cautiously.
 robot_control/velocity_interface.py   ← Add helper functions. Do not change existing ones.
 robot_control/waypoint_navigator.py   ← Extend navigation logic. Keep callable signature.
-run_labmate.py                         ← Wiring only. Keep the main() structure clean.
-backend/                               ← Create new FastAPI application files here.
-dashboard/                             ← Create new Streamlit files here.
-perception/                            ← Create new perception modules here.
-shared/                                ← Create shared config dataclasses here.
-simulation/scenes/                     ← Add lab environment MJCF files here.
-simulation/models/                     ← Add custom robot model variants here.
-tests/                                 ← Add pytest test files here.
+robot_control/route_graph.py          ← Add nodes/edges to match the MJCF. ROUTE_EDGES is
+                                        imported by tests/check_scene.py — keep them in sync.
+shared/task_cfg.py                    ← Config overrides via .replace(). Add shared schemas here.
+simulation/scenes/                    ← The laboratory MJCF. Re-run tests/check_scene.py after
+                                        every edit. Keep lab bodies static (no joints, no DOF).
+run_labmate.py                        ← Wiring only. Keep the main() structure clean.
+                                        No coordinates, no route literals.
+tests/                                ← Standalone scripts in the style of check_scene.py.
+                                        pytest is not installed; do not add it casually.
+backend/                              ← Create new FastAPI application files here.
+dashboard/                            ← Create new Streamlit files here.
+perception/                           ← Create new perception modules here.
+simulation/models/                    ← Add custom robot model variants here.
 ```
 
 ### External protected dependencies — agents do NOT modify these
@@ -270,6 +296,13 @@ source .venv/bin/activate
 python run_labmate.py
 ```
 
+### Validation before reporting any change
+
+```bash
+python tests/test_route_graph.py   # fast
+python tests/check_scene.py        # minutes; required after any scene edit
+```
+
 ### The only way to issue velocity commands
 
 ```python
@@ -291,7 +324,11 @@ controller.set_navigator(my_callable)
 | What | Where |
 |---|---|
 | K1 walking policy | `external/booster_deploy/tasks/locomotion/robots/k1/models/k1_walk.pt` |
-| K1 MuJoCo model | `external/booster_assets/robots/K1/K1_22dof.xml` |
+| **Scene actually loaded** | `simulation/scenes/labmate_scene.xml` |
+| Laboratory geometry and sites | `simulation/scenes/lab_environment.xml` |
+| K1 MuJoCo model (included by the scene) | `external/booster_assets/robots/K1/K1_22dof.xml` |
+| Task config override | `shared/task_cfg.py` → `LabMateInspectionTaskCfg` |
+| Navigation graph and route planning | `robot_control/route_graph.py` → `RouteGraph`, `ROUTE_EDGES` |
 | K1 joint config | `external/booster_deploy/booster_deploy/robots/k1.py` → `K1_CFG` |
 | Velocity limits | `external/booster_deploy/tasks/locomotion/robots/k1/__init__.py` → `K1WalkControllerCfg` |
 | Observation build | `external/booster_deploy/tasks/locomotion/locomotion.py` → `LocomotionPolicy.compute_observation()` |

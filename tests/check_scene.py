@@ -1,14 +1,27 @@
 #!/usr/bin/env python3
 """Checks for the LabMate scene. Needs only mujoco + numpy.
-Run:  python3 check_scene.py /path/to/dir/with/K1_22dof.xml
-Geometric/static checks only: it does NOT run the walking policy."""
+Run:  python3 tests/check_scene.py  [lab_scene.xml]  [K1_22dof.xml]
+Geometric/static checks only: it does NOT run the walking policy.
+
+The two models live in different trees: the laboratory scene is LabMate code
+tracked in simulation/scenes/, while the bare K1 reference model belongs to the
+read-only Booster assets under external/."""
 import os, sys, time
+from pathlib import Path
 import numpy as np
 import mujoco
 
-root = sys.argv[1] if len(sys.argv) > 1 else "."
-base = mujoco.MjModel.from_xml_path(os.path.join(root, "K1_22dof.xml"))
-lab = mujoco.MjModel.from_xml_path(os.path.join(root, "labmate_scene.xml"))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+LAB_SCENE = PROJECT_ROOT / "simulation" / "scenes" / "labmate_scene.xml"
+K1_BASE = (PROJECT_ROOT / "external" / "booster_assets" / "robots" / "K1"
+           / "K1_22dof.xml")
+
+lab_path = Path(sys.argv[1]) if len(sys.argv) > 1 else LAB_SCENE
+base_path = Path(sys.argv[2]) if len(sys.argv) > 2 else K1_BASE
+print(f"lab scene : {lab_path}")
+print(f"K1 base   : {base_path}\n")
+base = mujoco.MjModel.from_xml_path(str(base_path))
+lab = mujoco.MjModel.from_xml_path(str(lab_path))
 fails = 0
 def check(label, ok, detail=""):
     global fails
@@ -69,13 +82,15 @@ for n, p in P.items():
         if h: bad.setdefault(n, set()).update(h)
 check(f"{len(P)} sites: turn in place, arms out, no obstacle contact", not bad, str(bad) if bad else "")
 
-# 4. Route edges, sampled every 2 cm, heading along the edge
-loop = ["west", "northwest", "northeast", "east", "southeast", "southwest", "west"]
-E = [("nav_outside", "nav_entrance"), ("nav_entrance", "nav_start"), ("nav_start", "nav_wp_west")]
-E += [("nav_wp_"+a, "nav_wp_"+b) for a, b in zip(loop, loop[1:])]
-E += [("nav_wp_"+w, "inspect_"+s) for w, s in [
-    ("northwest", "electronics_a"), ("northeast", "electronics_b"), ("northeast", "server_rack"),
-    ("southwest", "robotics_bench"), ("southeast", "printer"), ("east", "storage"), ("west", "central_table")]]
+# 4. Route edges, sampled every 2 cm, heading along the edge.
+# Edges come from robot_control.route_graph so the planner and this validator
+# cannot disagree about which routes are cleared. Both directions are swept:
+# the planner treats edges as undirected, and every spur to an inspection site
+# has to be walked back out again.
+sys.path.insert(0, str(PROJECT_ROOT))
+from robot_control.route_graph import ROUTE_EDGES  # noqa: E402
+
+E = [e for a, b in ROUTE_EDGES for e in ((a, b), (b, a))]
 boxes = []
 mujoco.mj_forward(lab, d)
 for g in range(base.ngeom, lab.ngeom):
@@ -92,7 +107,7 @@ for a, b in E:
         if lab_hits(): bad.append((a, b)); break
         low = min(low, clearance(p))
     worst = min(worst, (low[0], f"{a} -> {b}, nearest {low[1]}"))
-check(f"{len(E)} route edges, arms out, no obstacle contact", not bad, str(bad) if bad else "")
+check(f"{len(E)} route edges (both directions), arms out, no obstacle contact", not bad, str(bad) if bad else "")
 check("min distance, route centreline to obstacle >= 0.60 m", worst[0] >= 0.60, f"{worst[0]:.3f} m on {worst[1]}")
 
 # 5. Spawn: only floor/self contacts at the start pose

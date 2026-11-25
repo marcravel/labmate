@@ -40,15 +40,16 @@ LabMate is a single-process, single-threaded application. All components run syn
 ```mermaid
 flowchart TD
     EP["run_labmate.py\n(entry point)"]
-    REG["Task Registry\nget_task('k1_walk')"]
-    CFG["K1WalkTaskCfg\n(ControllerCfg)"]
+    REG["Task Registry\nget_task('labmate_inspection')"]
+    CFG["LabMateInspectionTaskCfg\n(shared/task_cfg.py)\noverrides robot.mjcf_path"]
     LC["LabMateController\n(robot_control/labmate_controller.py)"]
+    RG["RouteGraph\n(robot_control/route_graph.py)\nreads nav_/inspect_ sites"]
     WN["WaypointNavigator\n(robot_control/waypoint_navigator.py)"]
     VI["velocity_interface.py\nset_velocity / get_robot_pose"]
     VC["VelocityCommand\nlin_vel_x · lin_vel_y · ang_vel_yaw"]
     LP["LocomotionPolicy\n(k1_walk.pt · TorchScript)"]
     OBS["Observation Builder\n69-dim vector × 10-frame history"]
-    MJ["MuJoCo Physics\nK1_22dof.xml · 500 Hz"]
+    MJ["MuJoCo Physics\nlabmate_scene.xml · 500 Hz\n(K1_22dof.xml + lab_environment.xml)"]
     RD["RobotData\njoint_pos · joint_vel · root_pos_w · root_quat_w"]
 
     PERC["perception/\n⚠ NOT IMPLEMENTED"]
@@ -56,7 +57,8 @@ flowchart TD
     DASH["dashboard/\n⚠ NOT IMPLEMENTED"]
 
     EP --> REG --> CFG --> LC
-    EP --> WN
+    LC -- "mj_model" --> RG
+    RG -- "waypoint list" --> WN
     WN -- "navigator callback" --> VI
     VI -- "writes" --> VC
     LC -- "policy_step()" --> LP
@@ -98,18 +100,33 @@ LabMate/
 │   │                             Injects navigator callback into policy_step().
 │   ├── velocity_interface.py   ← set_velocity(), stop_robot(), get_robot_pose().
 │   │                             All high-level commands enter the robot through here.
+│   ├── route_graph.py          ← RouteGraph: reads the nav_/inspect_ sites out of the
+│   │                             loaded MJCF and plans routes over ROUTE_EDGES (BFS).
+│   │                             Single source of truth for route connectivity.
 │   └── waypoint_navigator.py   ← WaypointNavigator: state machine for multi-waypoint
 │                                 patrol with heading control and inspection pauses.
 │
-├── simulation/                 ← PLANNED. No files yet.
-│   ├── models/                 ← Intended for custom robot model variants.
-│   └── scenes/                 ← Intended for lab environment MJCF scene files.
+├── simulation/
+│   ├── models/                 ← PLANNED. Intended for custom robot model variants.
+│   └── scenes/
+│       ├── labmate_scene.xml   ← Scene entry point. ← LOADED BY SIM
+│       │                         Includes K1_22dof.xml, then lab_environment.xml,
+│       │                         and re-points meshdir at the Booster meshes.
+│       └── lab_environment.xml ← Laboratory: 15 static bodies, 197 geoms,
+│                                 23 sites (9 nav_, 7 inspect_, 7 target_).
+│                                 Adds no joints, actuators or DOF.
 │
 ├── backend/                    ← PLANNED. No files yet. (FastAPI)
 ├── dashboard/                  ← PLANNED. No files yet. (Streamlit)
 ├── perception/                 ← PLANNED. No files yet. (OpenCV)
-├── shared/                     ← PLANNED. No files yet. (Shared config/utilities)
-├── tests/                      ← PLANNED. No files yet.
+├── shared/
+│   └── task_cfg.py             ← LabMateInspectionTaskCfg. Registers the
+│                                 "labmate_inspection" task: k1_walk with
+│                                 robot.mjcf_path pointing at labmate_scene.xml.
+├── tests/
+│   ├── check_scene.py          ← Static geometric validation of the scene:
+│   │                             robot arrays unchanged, site and route clearance.
+│   └── test_route_graph.py     ← Asserts generated routes stay on validated edges.
 │
 ├── external/                   ← NOT tracked by LabMate git. Must be placed manually.
 │   │                             See Installation section.
@@ -136,7 +153,9 @@ LabMate/
 │   │   └── scripts/deploy.py               ← Standalone CLI (not used by LabMate).
 │   │
 │   └── booster_assets/                     ← Official robot models and motion data.
-│       ├── robots/K1/K1_22dof.xml          ← MuJoCo MJCF model (22 DOF). ← LOADED BY SIM
+│       ├── robots/K1/K1_22dof.xml          ← MuJoCo MJCF model (22 DOF).
+│       │                                     Included by labmate_scene.xml.
+│       ├── robots/K1/meshes/               ← 52 STL meshes. Referenced via meshdir.
 │       ├── robots/K1/K1_22dof.urdf         ← URDF variant (not used in sim).
 │       └── src/booster_assets/__init__.py  ← Provides BOOSTER_ASSETS_DIR constant.
 │
@@ -146,6 +165,8 @@ LabMate/
 ```
 
 > **Note:** `external/` is excluded from the LabMate git repository. The two Booster repos are placed manually on disk. They are not git submodules and have no pinned version reference in LabMate's history.
+>
+> **Because `external/` is untracked, no LabMate file may live inside it.** The laboratory scene is LabMate code and is therefore tracked under `simulation/scenes/`. Nothing under `external/` is modified to load it: `shared/task_cfg.py` overrides `robot.mjcf_path` in a LabMate config subclass instead.
 
 ---
 
@@ -258,18 +279,25 @@ There are no `.env` files and no required environment variables for the current 
 python run_labmate.py
 ```
 
-This launches the MuJoCo viewer and starts the K1 robot walking autonomously through three patrol waypoints (Chemical Storage → Lab Bench → Home Base). Expected output:
+This launches the MuJoCo viewer and starts the K1 robot patrolling the laboratory. The route is not hard-coded: `RouteGraph` reads the `nav_*` and `inspect_*` sites out of the loaded scene and plans a round visiting all seven inspection stations, so the route can only use positions the model declares. Expected output:
 
 ```
 ============================================================
-  LabMate - Autonomous Waypoint Navigation (Milestone 3)
+  LabMate - Autonomous Laboratory Inspection Patrol
 ============================================================
-Patrol initialized with 3 checkpoints.
+Route: 23 waypoints, 7 inspection stations
+  - inspect_central_table
+  - inspect_electronics_a
+  - inspect_electronics_b
+  - inspect_server_rack
+  - inspect_storage
+  - inspect_printer
+  - inspect_robotics_bench
 Launching autonomous patrol...
 [MuJoCo] Controls: Space=pause/resume.
 [  1.0s] Pos: X=0.12, Y=0.00 | Cmd: vx=0.40, vy=0.00, yaw=0.00
 ...
-[Navigator] ARRIVED at Checkpoint 1: Station 1 (Chemical Storage)! Pausing 3.0s for inspection...
+[Navigator] ARRIVED at inspect_central_table! Pausing 3.0s for inspection...
 ```
 
 Controls during simulation:
@@ -295,9 +323,20 @@ Velocity commands are entered at the terminal prompt: `x y yaw` (e.g., `0.4 0.0 
 
 `dashboard/` is empty. No dashboard exists yet.
 
-### Tests (planned — not yet runnable)
+### Tests
 
-`tests/` is empty. No tests exist yet.
+Both test scripts are standalone (no pytest dependency) and exit non-zero on failure.
+
+```bash
+# Static geometric validation of the scene. Takes a few minutes: it sweeps every
+# site at 24 headings and every route edge, both directions, at 2 cm intervals.
+python tests/check_scene.py
+
+# Route planning: asserts generated routes only use validated edges. Fast.
+python tests/test_route_graph.py
+```
+
+`check_scene.py` verifies that the laboratory adds no robot state — that every robot array is identical and in the same ID slot as in the bare `K1_22dof.xml` — and that the navigation graph is collision-free. **Run it after any change to `simulation/scenes/`.** It does not run the walking policy.
 
 ---
 
@@ -386,19 +425,21 @@ Do not call `policy.inference()`, `ctrl_step()`, or write to `robot.data` from a
 
 | Subsystem | Status | Description |
 |---|---|---|
-| MuJoCo physics simulation | ✅ Implemented | 500 Hz physics loop; K1_22dof.xml loaded; PD actuator control. |
+| MuJoCo physics simulation | ✅ Implemented | 500 Hz physics loop; `labmate_scene.xml` loaded; PD actuator control. |
 | K1 robot model | ✅ Implemented | 22-DOF MJCF loaded from booster_assets. Full joint/body hierarchy. |
 | Official walking policy | ✅ Implemented | `k1_walk.pt` loaded via TorchScript. 50 Hz inference. Unmodified. |
 | Velocity command interface | ✅ Implemented | `set_velocity()`, `stop_robot()`, `get_robot_pose()` in `velocity_interface.py`. |
-| Waypoint navigator | ✅ Implemented | `WaypointNavigator`: heading control, position + yaw tolerance, inspection pause. |
+| Lab environment (scene) | ✅ Implemented | `simulation/scenes/`: 15 static bodies, 197 geoms, 7 inspection stations. Adds no DOF. |
+| Navigation graph | ✅ Implemented | `RouteGraph` reads `nav_*`/`inspect_*` sites from the model; BFS over `ROUTE_EDGES`. |
+| Waypoint navigator | ✅ Implemented | `WaypointNavigator`: closed-loop heading control during approach, position + yaw tolerance, inspection pause. |
 | Navigator ↔ controller integration | ✅ Implemented | Callback pattern wired in `run_labmate.py`. |
-| Lab environment (scene) | ⬜ Planned | `simulation/scenes/` is empty. No scene MJCF exists. |
+| Shared config | ✅ Implemented | `shared/task_cfg.py` only: the task config override. No shared schemas yet. |
+| Automated tests | ✅ Implemented | `tests/check_scene.py`, `tests/test_route_graph.py`. Standalone scripts, no pytest. |
+| Camera / image acquisition | ⬜ Planned | No `<camera>` exists in any MJCF. The K1 head carries empty mount frames only. |
 | Inspection logic | ⬜ Planned | No code exists in any module. |
 | Perception subsystem | ⬜ Planned | `perception/` is empty. OpenCV is installed but unused. |
 | Backend API | ⬜ Planned | `backend/` is empty. FastAPI is installed but unused. |
 | Dashboard UI | ⬜ Planned | `dashboard/` is empty. Streamlit is installed but unused. |
-| Shared config/utilities | ⬜ Planned | `shared/` is empty. |
-| Automated tests | ⬜ Planned | `tests/` is empty. |
 | Dependency declarations | ⚠ Missing | No `requirements.txt` or `pyproject.toml` at the LabMate root. |
 
 ---
