@@ -1,0 +1,106 @@
+{
+  "name": "demo_findings",
+  "title": "Two findings - the pitch take",
+  "notes": "Station 2 raises a compliance and energy finding (sash left open). Station 4 raises the critical one (temperature excursion, door ajar, alarm cable disconnected). Stations 1, 3 and 5 stay clear, so the round reads pass - finding - pass - critical - pass.",
+  "geoms": {
+    "eyewash_tag": {
+      "material": "mat_screen_green"
+    },
+    "eyewash_obstruction": {
+      "visible": false
+    },
+    "eyewash_obstruction_tape": {
+      "visible": false
+    },
+    "hood_sash": {
+      "pos": [
+        3.8,
+        2.315,
+        1.667
+      ]
+    },
+    "hood_flow_led": {
+      "material": "mat_red"
+    },
+    "rack_led0": {
+      "material": "mat_screen_green"
+    },
+    "rack_led1": {
+      "material": "mat_screen_green"
+    },
+    "rack_led2": {
+      "material": "mat_screen_green"
+    },
+    "rack_led3": {
+      "material": "mat_screen_green"
+    },
+    "rack_led4": {
+      "material": "mat_screen_green"
+    },
+    "rack_led5": {
+      "material": "mat_screen_green"
+    },
+    "freezer_display": {
+      "material": "mat_red"
+    },
+    "freezer_alarm_led": {
+      "material": "mat_red"
+    },
+    "freezer_door": {
+      "pos": [
+        6.5,
+        -0.12,
+        0.86
+      ],
+      "quat": [
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "freezer_cable_ok": {
+      "visible": false
+    },
+    "freezer_cable_dropped": {
+      "material": "mat_dark",
+      "visible": true
+    },
+    "chem_door_l": {
+      "material": "mat_chem_yellow",
+      "pos": [
+        1.3,
+        -2.345,
+        0.6
+      ],
+      "quat": [
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "chem_door_r": {
+      "material": "mat_chem_yellow",
+      "pos": [
+        2.3,
+        -2.345,
+        0.6
+      ],
+      "quat": [
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "chem_spill": {
+      "visible": false
+    }
+  },
+  "panel": {
+    "temperature_in_range": "-11.6 C (setpoint -80.0)",
+    "airflow_nominal": "0.19 m/s face velocity - below 0.40 alarm threshold",
+    "tag_current": "activated 3 days ago"
+  }
+}

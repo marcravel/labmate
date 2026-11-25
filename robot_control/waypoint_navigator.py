@@ -13,8 +13,15 @@ def normalize_angle(angle):
 
 class WaypointNavigator:
     def __init__(self, waypoints, pos_tolerance=0.25, yaw_tolerance=0.20,
-                 heading_gain=1.1, realign_tol=0.35, yaw_rate_max=0.45):
+                 heading_gain=1.1, realign_tol=0.35, yaw_rate_max=0.45,
+                 on_inspect=None):
         self.waypoints = waypoints
+        # Called once per station, at the moment the robot has stopped and
+        # finished turning to face it - i.e. when it is standing where a human
+        # inspector would stand. Signature: on_inspect(controller, waypoint,
+        # elapsed_time). Optional: the patrol runs unchanged without it, which
+        # is what keeps navigation independent of inspection and perception.
+        self.on_inspect = on_inspect
         self.current_idx = 0
         self.pos_tol = pos_tolerance
         self.yaw_tol = yaw_tolerance
@@ -116,6 +123,8 @@ class WaypointNavigator:
             if self._rotate_in_place(controller, wp["yaw"], current_yaw, self.yaw_tol):
                 if self.phase == "FACE_STATION":
                     print(f"[Navigator] ARRIVED at {wp['name']}! Pausing {self.pause_duration}s for inspection...")
+                    if self.on_inspect is not None:
+                        self.on_inspect(controller, wp, elapsed_time)
                     self.pause_start_time = elapsed_time
                     self.phase = "INSPECT_PAUSE"
                 else:

@@ -27,10 +27,15 @@ The working system consists of these custom files on top of Booster Deploy:
 | `robot_control/waypoint_navigator.py` | Patrol state machine. |
 | `robot_control/route_graph.py` | Navigation graph read from the MJCF. Owns `ROUTE_EDGES`. |
 | `shared/task_cfg.py` | Registers `labmate_inspection`; overrides `robot.mjcf_path`. |
+| `shared/inspection.py` | The inspection checklist. Owns `STATIONS` and `STATION_ORDER`. |
+| `shared/scenario.py` | Applies a scenario JSON to the model. Lab visual geoms only. |
+| `shared/inspection_report.py` | Collects verdicts; renders the round report and JSON. |
+| `simulation/scenarios/*.json` | Lab state per run: `nominal`, `demo_findings`, `all_faults`. |
 | `simulation/scenes/labmate_scene.xml` | Scene entry point. This is the model that loads. |
 | `simulation/scenes/lab_environment.xml` | The laboratory: static bodies, geoms, nav/inspect sites. |
 | `tests/check_scene.py` | Static geometric validation of the scene. |
 | `tests/test_route_graph.py` | Route planning stays on validated edges. |
+| `tests/test_inspection.py` | Checklist matches the scene; every check can pass and fail. |
 
 `backend/`, `dashboard/`, `perception/`, `simulation/models/` are still empty. Do not assume any planned module exists — verify first.
 
@@ -54,6 +59,10 @@ These constraints must not be violated under any circumstances.
 12. **Run `tests/check_scene.py` after any change to `simulation/scenes/`.** It is the guard on the project's central invariant — that the laboratory adds no robot state, so the official policy still sees the model it was trained on. Never weaken its equality assertions to make a change pass.
 13. **Do not hand-write waypoint coordinates.** Routes come from `RouteGraph`, which reads the model's own sites. A hand-typed route once put a waypoint inside the central table. If a new position is needed, add a site to the MJCF and an edge to `ROUTE_EDGES`, then re-run both test scripts.
 14. **Do not remove the closed-loop heading correction in the APPROACH phase.** It was verified that without it the robot walks off course, misses waypoints and pushes into a wall indefinitely.
+15. **A scenario may only change the laboratory's visual geoms.** `shared/scenario.py` refuses the robot model (protecting the walking policy) and every collision geom (protecting the route clearances `tests/check_scene.py` swept once). Do not relax either guard. If an inspection needs a physical obstacle rather than a visible one, the route must be re-swept.
+16. **An inspection check must be able to both pass and fail.** `tests/test_inspection.py` asserts this across the scenario set. A check that reads a geom no scenario ever changes reports PASS forever, which is worse than having no check at all. Add the fault state to a scenario in the same change as the check.
+17. **Inspection checks read the simulation, never the scenario file.** A scenario arranges the lab; checks then observe it, exactly as a camera-based detector would. Do not shortcut a verdict by reading the scenario's declared state — that would make every check tautologically true and defeat the later swap to real perception.
+18. **Do not present a scenario's `panel` readings as measurements.** They are labels for the state the scenario set up, not simulated physics. Reports must keep saying so.
 
 ---
 
@@ -88,6 +97,13 @@ This table identifies the actual file, class, and function responsible for each 
 | **Main simulation loop** | `external/booster_deploy/booster_deploy/controllers/mujoco_controller.py` | `MujocoController.run()` | `update_state → policy_step → ctrl_step` at 50 Hz |
 | **Navigator injection** | `robot_control/labmate_controller.py` | `LabMateController.set_navigator()` | stores callable `navigator(controller, elapsed)` |
 | **Navigator callback call** | `robot_control/labmate_controller.py` | `LabMateController.policy_step()` | calls `self.navigator(self, elapsed)` before `super().policy_step()` |
+| **Inspection checklist** | `shared/inspection.py` | `STATIONS`, `STATION_ORDER` | 5 stations, 12 checks. **Single source of truth** for what is inspected and in what order; `route_graph.DEFAULT_STATION_ORDER` imports `STATION_ORDER`. |
+| **Check primitives** | `shared/inspection.py` | `IndicatorsNominal`, `PoseUnchanged`, `HeightAtMost`, `Absent`, `Present` | Each reads `mj_model` geom material / pose / rgba. |
+| **Checklist validation** | `shared/inspection.py` | `validate(model)` | Called at startup by `run_labmate.py`; fails loudly if a station site or state geom is missing. |
+| **Scenario load / apply** | `shared/scenario.py` | `load()`, `apply()`, `_check_writable()` | Refuses robot geoms and collision geoms. `DEFAULT_SCENARIO = "nominal"`. |
+| **Inspection reporting** | `shared/inspection_report.py` | `InspectionRun.record()` / `render()` / `to_dict()` | `record` is the navigator's `on_inspect` callback. |
+| **Inspection hook** | `robot_control/waypoint_navigator.py` | `WaypointNavigator.__init__(on_inspect=...)` | Fires in FACE_STATION once the robot has stopped and turned to face the station. Optional: the patrol runs without it. |
+| **Inspection validation** | `tests/test_inspection.py` | — | Scenario verdicts, pass/fail coverage of every check, scenario write guards. |
 | **Stdin override (disabled)** | `robot_control/labmate_controller.py` | `LabMateController.update_vel_command()` | `pass` — intentionally a no-op |
 | **Velocity command write** | `robot_control/velocity_interface.py` | `set_velocity(controller, vx, vy, yaw)` | Clamps to `vx_forward_max=1.6`, `vx_backward_max=0.3`, `vy_max=0.3`, `vyaw_max=1.8` |
 | **Stop robot** | `robot_control/velocity_interface.py` | `stop_robot(controller)` | Zeros all three velocity axes |
@@ -197,8 +213,17 @@ robot_control/waypoint_navigator.py   ← Extend navigation logic. Keep callable
 robot_control/route_graph.py          ← Add nodes/edges to match the MJCF. ROUTE_EDGES is
                                         imported by tests/check_scene.py — keep them in sync.
 shared/task_cfg.py                    ← Config overrides via .replace(). Add shared schemas here.
+shared/inspection.py                  ← The checklist. Adding a station or check here requires a
+                                        matching fault state in a scenario, or test_inspection.py
+                                        fails: a check that never fails is not a check.
+shared/scenario.py                    ← Scenario loading. Do not relax the robot/collision guards.
+shared/inspection_report.py           ← Report rendering and JSON export. Formatting only.
+simulation/scenarios/                 ← Lab state per run. Visual geoms only. Re-run
+                                        tests/test_inspection.py after every edit.
 simulation/scenes/                    ← The laboratory MJCF. Re-run tests/check_scene.py after
                                         every edit. Keep lab bodies static (no joints, no DOF).
+                                        Inspectable state is a geom's material, pose or
+                                        visibility — never a joint.
 run_labmate.py                        ← Wiring only. Keep the main() structure clean.
                                         No coordinates, no route literals.
 tests/                                ← Standalone scripts in the style of check_scene.py.
@@ -293,13 +318,16 @@ Do not update documentation to describe planned features as implemented. The sta
 
 ```bash
 source .venv/bin/activate
-python run_labmate.py
+python run_labmate.py                            # nominal: all stations pass
+python run_labmate.py --scenario demo_findings   # the two scripted findings
+python run_labmate.py --scenario all_faults --report round.json
 ```
 
 ### Validation before reporting any change
 
 ```bash
 python tests/test_route_graph.py   # fast
+python tests/test_inspection.py    # fast; required after any checklist or scenario edit
 python tests/check_scene.py        # minutes; required after any scene edit
 ```
 
@@ -329,6 +357,8 @@ controller.set_navigator(my_callable)
 | K1 MuJoCo model (included by the scene) | `external/booster_assets/robots/K1/K1_22dof.xml` |
 | Task config override | `shared/task_cfg.py` → `LabMateInspectionTaskCfg` |
 | Navigation graph and route planning | `robot_control/route_graph.py` → `RouteGraph`, `ROUTE_EDGES` |
+| Inspection checklist | `shared/inspection.py` → `STATIONS`, `STATION_ORDER` |
+| Scenario files | `simulation/scenarios/*.json` |
 | K1 joint config | `external/booster_deploy/booster_deploy/robots/k1.py` → `K1_CFG` |
 | Velocity limits | `external/booster_deploy/tasks/locomotion/robots/k1/__init__.py` → `K1WalkControllerCfg` |
 | Observation build | `external/booster_deploy/tasks/locomotion/locomotion.py` → `LocomotionPolicy.compute_observation()` |

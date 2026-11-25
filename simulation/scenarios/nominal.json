@@ -1,0 +1,106 @@
+{
+  "name": "nominal",
+  "title": "All clear",
+  "notes": "Every station compliant. The baseline take: proves the robot reports PASS and does not simply alarm at everything it sees.",
+  "geoms": {
+    "eyewash_tag": {
+      "material": "mat_screen_green"
+    },
+    "eyewash_obstruction": {
+      "visible": false
+    },
+    "eyewash_obstruction_tape": {
+      "visible": false
+    },
+    "hood_sash": {
+      "pos": [
+        3.8,
+        2.315,
+        1.317
+      ]
+    },
+    "hood_flow_led": {
+      "material": "mat_screen_green"
+    },
+    "rack_led0": {
+      "material": "mat_screen_green"
+    },
+    "rack_led1": {
+      "material": "mat_screen_green"
+    },
+    "rack_led2": {
+      "material": "mat_screen_green"
+    },
+    "rack_led3": {
+      "material": "mat_screen_green"
+    },
+    "rack_led4": {
+      "material": "mat_screen_green"
+    },
+    "rack_led5": {
+      "material": "mat_screen_green"
+    },
+    "freezer_display": {
+      "material": "mat_screen_green"
+    },
+    "freezer_alarm_led": {
+      "material": "mat_screen_green"
+    },
+    "freezer_door": {
+      "pos": [
+        6.585,
+        0.0,
+        0.86
+      ],
+      "quat": [
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "freezer_cable_ok": {
+      "material": "mat_dark",
+      "visible": true
+    },
+    "freezer_cable_dropped": {
+      "visible": false
+    },
+    "chem_door_l": {
+      "material": "mat_chem_yellow",
+      "pos": [
+        1.3,
+        -2.345,
+        0.6
+      ],
+      "quat": [
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "chem_door_r": {
+      "material": "mat_chem_yellow",
+      "pos": [
+        2.3,
+        -2.345,
+        0.6
+      ],
+      "quat": [
+        1,
+        0,
+        0,
+        0
+      ]
+    },
+    "chem_spill": {
+      "visible": false
+    }
+  },
+  "panel": {
+    "temperature_in_range": "-80.4 C (setpoint -80.0)",
+    "airflow_nominal": "0.52 m/s face velocity",
+    "tag_current": "activated 3 days ago"
+  }
+}

@@ -65,9 +65,13 @@ site_nodes = {
 check("graph nodes are exactly the nav_/inspect_ sites in the model",
       set(graph.nodes) == site_nodes,
       f"{len(graph.nodes)} nodes vs {len(site_nodes)} sites")
-check(f"{len(graph.stations)} inspection stations found",
-      len(graph.stations) == len(DEFAULT_STATION_ORDER),
-      f"{graph.stations}")
+# Not every inspection site is on the round. Sites with no checklist entry
+# (the central table, the printer) stay in the model with validated, swept
+# edges so they can be added to a checklist later without navigation work.
+check(f"{len(graph.stations)} inspection sites in the model, "
+      f"{len(DEFAULT_STATION_ORDER)} on the round",
+      set(DEFAULT_STATION_ORDER) <= set(graph.stations),
+      f"off the round: {sorted(set(graph.stations) - set(DEFAULT_STATION_ORDER))}")
 
 # 2. The patrol route travels only validated edges
 route = graph.patrol_route()

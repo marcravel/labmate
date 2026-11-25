@@ -25,6 +25,8 @@ from collections import deque
 
 import numpy as np
 
+from shared.inspection import STATION_ORDER
+
 NAV_PREFIX = "nav_"
 INSPECT_PREFIX = "inspect_"
 
@@ -49,16 +51,18 @@ ROUTE_EDGES: tuple[tuple[str, str], ...] = (
 )
 """Undirected edges swept for clearance by tests/check_scene.py."""
 
-DEFAULT_STATION_ORDER: tuple[str, ...] = (
-    "inspect_central_table",
-    "inspect_electronics_a",
-    "inspect_electronics_b",
-    "inspect_server_rack",
-    "inspect_storage",
-    "inspect_printer",
-    "inspect_robotics_bench",
-)
-"""The seven stations in perimeter order, so the patrol never doubles back."""
+DEFAULT_STATION_ORDER: tuple[str, ...] = STATION_ORDER
+"""The patrol's stations, in order, taken from the inspection checklist.
+
+Imported rather than restated: the order the robot walks and the order the
+report lists have to be the same thing, and two literals would drift. The
+checklist is the source of truth for *which* stations exist and in what order;
+``ROUTE_EDGES`` remains the source of truth for how to get between them.
+
+``inspect_central_table`` and ``inspect_printer`` are deliberately not on the
+round. Both are still sites in the model with validated, swept edges, so either
+can be added to a checklist later without any navigation work - the table is
+furniture with no inspectable state, and the printer is held as a spare."""
 
 
 def quat_to_yaw(q) -> float:
@@ -186,7 +190,7 @@ class RouteGraph:
         return self._as_waypoints(nodes)
 
     def patrol_route(self, stations=None) -> list[dict]:
-        """Full inspection round: start pad, seven stations, back to the pad."""
+        """Full inspection round: start pad, every checklist station, back to the pad."""
         return self.route(stations or DEFAULT_STATION_ORDER)
 
     # -- internals --------------------------------------------------------
