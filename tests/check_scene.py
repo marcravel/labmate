@@ -1,14 +1,27 @@
 #!/usr/bin/env python3
 """Checks for the LabMate scene. Needs only mujoco + numpy.
-Run:  python3 check_scene.py /path/to/dir/with/K1_22dof.xml
-Geometric/static checks only: it does NOT run the walking policy."""
+Run:  python3 tests/check_scene.py  [lab_scene.xml]  [K1_22dof.xml]
+Geometric/static checks only: it does NOT run the walking policy.
+
+The two models live in different trees: the laboratory scene is LabMate code
+tracked in simulation/scenes/, while the bare K1 reference model belongs to the
+read-only Booster assets under external/."""
 import os, sys, time
+from pathlib import Path
 import numpy as np
 import mujoco
 
-root = sys.argv[1] if len(sys.argv) > 1 else "."
-base = mujoco.MjModel.from_xml_path(os.path.join(root, "K1_22dof.xml"))
-lab = mujoco.MjModel.from_xml_path(os.path.join(root, "labmate_scene.xml"))
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+LAB_SCENE = PROJECT_ROOT / "simulation" / "scenes" / "labmate_scene.xml"
+K1_BASE = (PROJECT_ROOT / "external" / "booster_assets" / "robots" / "K1"
+           / "K1_22dof.xml")
+
+lab_path = Path(sys.argv[1]) if len(sys.argv) > 1 else LAB_SCENE
+base_path = Path(sys.argv[2]) if len(sys.argv) > 2 else K1_BASE
+print(f"lab scene : {lab_path}")
+print(f"K1 base   : {base_path}\n")
+base = mujoco.MjModel.from_xml_path(str(base_path))
+lab = mujoco.MjModel.from_xml_path(str(lab_path))
 fails = 0
 def check(label, ok, detail=""):
     global fails

@@ -1,0 +1,320 @@
+<mujocoinclude>
+  <!--
+    LabMate laboratory environment. Included by labmate_scene.xml AFTER K1_22dof.xml.
+    Units: metres. Origin: robot start point on the floor. +X into the room, +Y left (north), +Z up.
+    Adds only static bodies. No ground plane, lights, joints, actuators, options or global defaults.
+  -->
+  <default>
+    <default class="lab_vis">
+      <geom group="2" contype="0" conaffinity="0" density="0"/>
+    </default>
+    <default class="lab_col">
+      <geom group="3" contype="1" conaffinity="1" density="0" rgba="0.9 0.2 0.2 0.3"/>
+    </default>
+  </default>
+
+  <asset>
+    <material name="mat_floor" rgba="0.50 0.52 0.55 1" specular="0.1" shininess="0.15"/>
+    <material name="mat_wall" rgba="0.88 0.89 0.87 1" specular="0.05" shininess="0.1"/>
+    <material name="mat_trim" rgba="0.28 0.31 0.35 1" specular="0.1" shininess="0.2"/>
+    <material name="mat_accent" rgba="0.05 0.42 0.52 1" specular="0.3" shininess="0.4"/>
+    <material name="mat_bench_top" rgba="0.30 0.33 0.37 1" specular="0.3" shininess="0.4"/>
+    <material name="mat_wood" rgba="0.62 0.45 0.28 1" specular="0.1" shininess="0.2"/>
+    <material name="mat_frame" rgba="0.55 0.58 0.62 1" specular="0.5" shininess="0.5"/>
+    <material name="mat_instrument" rgba="0.80 0.79 0.73 1" specular="0.2" shininess="0.3"/>
+    <material name="mat_instrument_dark" rgba="0.18 0.20 0.23 1" specular="0.3" shininess="0.4"/>
+    <material name="mat_dark" rgba="0.07 0.07 0.08 1" specular="0.2" shininess="0.3"/>
+    <material name="mat_screen" rgba="0.10 0.45 0.70 1" specular="0.5" shininess="0.6" emission="0.6"/>
+    <material name="mat_screen_green" rgba="0.15 0.90 0.40 1" specular="0.1" shininess="0.1" emission="0.6"/>
+    <material name="mat_esd" rgba="0.12 0.30 0.50 1" specular="0.05" shininess="0.1"/>
+    <material name="mat_pcb" rgba="0.04 0.40 0.18 1" specular="0.2" shininess="0.3"/>
+    <material name="mat_pegboard" rgba="0.55 0.47 0.34 1" specular="0.05" shininess="0.1"/>
+    <material name="mat_rack" rgba="0.10 0.11 0.13 1" specular="0.4" shininess="0.4"/>
+    <material name="mat_red" rgba="0.78 0.08 0.06 1" specular="0.3" shininess="0.4"/>
+    <material name="mat_marking_yellow" rgba="0.95 0.72 0.05 1" specular="0.1" shininess="0.2"/>
+    <material name="mat_marking_blue" rgba="0.05 0.35 0.85 1" specular="0.1" shininess="0.2"/>
+    <material name="mat_bin_blue" rgba="0.13 0.30 0.58 1" specular="0.1" shininess="0.2"/>
+    <material name="mat_bin_grey" rgba="0.45 0.48 0.52 1" specular="0.2" shininess="0.3"/>
+    <material name="mat_cardboard" rgba="0.60 0.46 0.28 1" specular="0" shininess="0"/>
+  </asset>
+
+  <worldbody>
+    <!-- Visual only floor skin 1 mm above the K1 ground plane. Physics stays on the original "ground" geom. -->
+    <body name="lab_floor">
+      <geom name="floor_skin" class="lab_vis" type="box" pos="3 0 0.0005" size="4 3 0.0005" material="mat_floor"/>
+      <geom name="start_pad" class="lab_vis" type="box" pos="0 0 0.00125" size="0.3 0.3 0.00025" material="mat_marking_blue"/>
+      <geom name="start_arrow" class="lab_vis" type="box" pos="0.41 0 0.00125" size="0.09 0.03 0.00025" material="mat_marking_blue"/>
+      <geom name="mark_electronics_a" class="lab_vis" type="box" pos="1.6 2.06 0.00125" size="0.35 0.03 0.00025" material="mat_marking_yellow"/>
+      <geom name="mark_electronics_b" class="lab_vis" type="box" pos="3.8 2.06 0.00125" size="0.35 0.03 0.00025" material="mat_marking_yellow"/>
+      <geom name="mark_rack" class="lab_vis" type="box" pos="5.6 2.01 0.00125" size="0.4 0.03 0.00025" material="mat_marking_yellow"/>
+      <geom name="mark_robotics" class="lab_vis" type="box" pos="1.8 -2.06 0.00125" size="0.35 0.03 0.00025" material="mat_marking_yellow"/>
+      <geom name="mark_printer" class="lab_vis" type="box" pos="3.9 -2.06 0.00125" size="0.35 0.03 0.00025" material="mat_marking_yellow"/>
+      <geom name="mark_storage" class="lab_vis" type="box" pos="6.36 0 0.00125" size="0.03 0.35 0.00025" material="mat_marking_yellow"/>
+      <geom name="mark_central" class="lab_vis" type="box" pos="2.01 0 0.00125" size="0.03 0.35 0.00025" material="mat_marking_yellow"/>
+    </body>
+
+    <!-- Room shell. Interior X -1..7, Y -3..3. Wall thickness 0.10. North/east drawn 2.8 m, south/west cut away to 1.0 m for the viewer; all collide to 2.8 m. -->
+    <body name="lab_walls">
+      <geom name="wall_north" class="lab_vis" type="box" pos="3 3.05 1.4" size="4.1 0.05 1.4" material="mat_wall"/>
+      <geom name="col_wall_north" class="lab_col" type="box" pos="3 3.05 1.4" size="4.1 0.05 1.4"/>
+      <geom name="skirt_north" class="lab_vis" type="box" pos="3 3.05 0.06" size="4.1 0.055 0.06" material="mat_trim"/>
+      <geom name="wall_south" class="lab_vis" type="box" pos="3 -3.05 0.5" size="4.1 0.05 0.5" material="mat_wall"/>
+      <geom name="col_wall_south" class="lab_col" type="box" pos="3 -3.05 1.4" size="4.1 0.05 1.4"/>
+      <geom name="skirt_south" class="lab_vis" type="box" pos="3 -3.05 0.06" size="4.1 0.055 0.06" material="mat_trim"/>
+      <geom name="wall_east" class="lab_vis" type="box" pos="7.05 0 1.4" size="0.05 3 1.4" material="mat_wall"/>
+      <geom name="col_wall_east" class="lab_col" type="box" pos="7.05 0 1.4" size="0.05 3 1.4"/>
+      <geom name="skirt_east" class="lab_vis" type="box" pos="7.05 0 0.06" size="0.055 3 0.06" material="mat_trim"/>
+      <geom name="wall_west_n" class="lab_vis" type="box" pos="-1.05 1.85 0.5" size="0.05 1.15 0.5" material="mat_wall"/>
+      <geom name="col_wall_west_n" class="lab_col" type="box" pos="-1.05 1.85 1.4" size="0.05 1.15 1.4"/>
+      <geom name="skirt_west_n" class="lab_vis" type="box" pos="-1.05 1.85 0.06" size="0.055 1.15 0.06" material="mat_trim"/>
+      <geom name="wall_west_s" class="lab_vis" type="box" pos="-1.05 -1.85 0.5" size="0.05 1.15 0.5" material="mat_wall"/>
+      <geom name="col_wall_west_s" class="lab_col" type="box" pos="-1.05 -1.85 1.4" size="0.05 1.15 1.4"/>
+      <geom name="skirt_west_s" class="lab_vis" type="box" pos="-1.05 -1.85 0.06" size="0.055 1.15 0.06" material="mat_trim"/>
+    </body>
+
+    <!-- Entrance in the west wall: clear opening 1.40 wide x 2.10 high, centred on y=0. Door is modelled as absent (open). -->
+    <body name="lab_entrance">
+      <geom name="door_post_n" class="lab_vis" type="box" pos="-1.05 0.74 1.09" size="0.07 0.04 1.09" material="mat_accent"/>
+      <geom name="col_door_post_n" class="lab_col" type="box" pos="-1.05 0.74 1.09" size="0.07 0.04 1.09"/>
+      <geom name="door_post_s" class="lab_vis" type="box" pos="-1.05 -0.74 1.09" size="0.07 0.04 1.09" material="mat_accent"/>
+      <geom name="col_door_post_s" class="lab_col" type="box" pos="-1.05 -0.74 1.09" size="0.07 0.04 1.09"/>
+      <geom name="door_lintel" class="lab_vis" type="box" pos="-1.05 0 2.14" size="0.07 0.78 0.04" material="mat_accent"/>
+      <geom name="col_door_lintel" class="lab_col" type="box" pos="-1.05 0 2.14" size="0.07 0.78 0.04"/>
+    </body>
+
+    <!-- Electronics workstation A: bench 1.80 x 0.75 x 0.75 (soldering, measurement). -->
+    <body name="electronics_bench_a">
+      <geom name="ebench_a_top" class="lab_vis" type="box" pos="1.6 2.625 0.73" size="0.9 0.375 0.02" material="mat_bench_top"/>
+      <geom name="ebench_a_leg0" class="lab_vis" type="box" pos="0.75 2.3 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ebench_a_leg1" class="lab_vis" type="box" pos="2.45 2.3 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ebench_a_leg2" class="lab_vis" type="box" pos="0.75 2.95 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ebench_a_leg3" class="lab_vis" type="box" pos="2.45 2.95 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ebench_a_shelf" class="lab_vis" type="box" pos="1.6 2.625 0.235" size="0.82 0.295 0.015" material="mat_frame"/>
+      <geom name="col_ebench_a" class="lab_col" type="box" pos="1.6 2.625 0.375" size="0.9 0.375 0.375"/>
+      <geom name="esd_mat" class="lab_vis" type="box" pos="1.375 2.5 0.752" size="0.375 0.2 0.002" material="mat_esd"/>
+      <geom name="scope_a" class="lab_vis" type="box" pos="1.05 2.8 0.85" size="0.17 0.07 0.1" material="mat_instrument"/>
+      <geom name="scope_a_screen" class="lab_vis" type="box" pos="1.005 2.73 0.855" size="0.095 0.003 0.065" material="mat_screen"/>
+      <geom name="scope_a_knob0" class="lab_vis" type="box" pos="1.155 2.725 0.805" size="0.02 0.008 0.015" material="mat_dark"/>
+      <geom name="scope_a_knob1" class="lab_vis" type="box" pos="1.155 2.725 0.855" size="0.02 0.008 0.015" material="mat_dark"/>
+      <geom name="scope_a_knob2" class="lab_vis" type="box" pos="1.155 2.725 0.905" size="0.02 0.008 0.015" material="mat_dark"/>
+      <geom name="col_scope_a" class="lab_col" type="box" pos="1.05 2.8 0.85" size="0.17 0.08 0.1"/>
+      <geom name="psu_a" class="lab_vis" type="box" pos="1.54 2.8 0.82" size="0.14 0.1 0.07" material="mat_instrument_dark"/>
+      <geom name="psu_a_display" class="lab_vis" type="box" pos="1.49 2.697 0.84" size="0.06 0.003 0.02" material="mat_screen_green"/>
+      <geom name="solder_base" class="lab_vis" type="cylinder" pos="2 2.65 0.78" size="0.07 0.03" material="mat_accent"/>
+      <geom name="solder_iron" class="lab_vis" type="capsule" fromto="2.1 2.6 0.77 2.25 2.55 0.84" size="0.012" material="mat_dark"/>
+      <geom name="test_pcb" class="lab_vis" type="box" pos="1.325 2.485 0.759" size="0.125 0.085 0.005" material="mat_pcb"/>
+      <geom name="test_pcb_chip" class="lab_vis" type="box" pos="1.32 2.49 0.77" size="0.03 0.03 0.006" material="mat_dark"/>
+      <geom name="pegboard_a" class="lab_vis" type="box" pos="1.6 2.987 1.45" size="0.85 0.0125 0.3" material="mat_pegboard"/>
+    </body>
+
+    <!-- Electronics workstation B: bench 1.80 x 0.75 x 0.75 (power and signal testing). -->
+    <body name="electronics_bench_b">
+      <geom name="ebench_b_top" class="lab_vis" type="box" pos="3.8 2.625 0.73" size="0.9 0.375 0.02" material="mat_bench_top"/>
+      <geom name="ebench_b_leg0" class="lab_vis" type="box" pos="2.95 2.3 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ebench_b_leg1" class="lab_vis" type="box" pos="4.65 2.3 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ebench_b_leg2" class="lab_vis" type="box" pos="2.95 2.95 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ebench_b_leg3" class="lab_vis" type="box" pos="4.65 2.95 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ebench_b_shelf" class="lab_vis" type="box" pos="3.8 2.625 0.235" size="0.82 0.295 0.015" material="mat_frame"/>
+      <geom name="col_ebench_b" class="lab_col" type="box" pos="3.8 2.625 0.375" size="0.9 0.375 0.375"/>
+      <geom name="scope_b" class="lab_vis" type="box" pos="3.3 2.78 0.85" size="0.17 0.07 0.1" material="mat_instrument"/>
+      <geom name="scope_b_screen" class="lab_vis" type="box" pos="3.255 2.71 0.855" size="0.095 0.003 0.065" material="mat_screen"/>
+      <geom name="scope_b_knob0" class="lab_vis" type="box" pos="3.405 2.705 0.805" size="0.02 0.008 0.015" material="mat_dark"/>
+      <geom name="scope_b_knob1" class="lab_vis" type="box" pos="3.405 2.705 0.855" size="0.02 0.008 0.015" material="mat_dark"/>
+      <geom name="scope_b_knob2" class="lab_vis" type="box" pos="3.405 2.705 0.905" size="0.02 0.008 0.015" material="mat_dark"/>
+      <geom name="col_scope_b" class="lab_col" type="box" pos="3.3 2.78 0.85" size="0.17 0.08 0.1"/>
+      <geom name="monitor_b_foot" class="lab_vis" type="box" pos="4.2 2.8 0.7575" size="0.1 0.06 0.0075" material="mat_dark"/>
+      <geom name="monitor_b_neck" class="lab_vis" type="box" pos="4.2 2.8 0.8125" size="0.02 0.015 0.0475" material="mat_dark"/>
+      <geom name="monitor_b_panel" class="lab_vis" type="box" pos="4.2 2.8 1.005" size="0.27 0.015 0.165" material="mat_dark"/>
+      <geom name="monitor_b_screen" class="lab_vis" type="box" pos="4.2 2.783 1.005" size="0.255 0.002 0.15" material="mat_screen"/>
+      <geom name="col_monitor_b" class="lab_col" type="box" pos="4.2 2.8 0.96" size="0.27 0.06 0.21"/>
+      <geom name="dmm" class="lab_vis" type="box" pos="3.71 2.585 0.775" size="0.06 0.035 0.025" material="mat_marking_yellow"/>
+      <geom name="load_unit" class="lab_vis" type="box" pos="3.725 2.81 0.825" size="0.175 0.11 0.075" material="mat_instrument"/>
+      <geom name="terminal0" class="lab_vis" type="cylinder" pos="3.62 2.69 0.795" size="0.018 0.015" material="mat_red"/>
+      <geom name="terminal1" class="lab_vis" type="cylinder" pos="3.72 2.69 0.795" size="0.018 0.015" material="mat_dark"/>
+      <geom name="terminal2" class="lab_vis" type="cylinder" pos="3.82 2.69 0.795" size="0.018 0.015" material="mat_marking_blue"/>
+    </body>
+
+    <!-- Inspection asset: server/control rack 0.70 x 0.80 x 1.60. -->
+    <body name="server_rack">
+      <geom name="rack_body" class="lab_vis" type="box" pos="5.6 2.6 0.8" size="0.35 0.4 0.8" material="mat_rack"/>
+      <geom name="rack_unit0" class="lab_vis" type="box" pos="5.6 2.195 0.285" size="0.3 0.005 0.085" material="mat_instrument_dark"/>
+      <geom name="rack_led0" class="lab_vis" type="box" pos="5.36 2.188 0.28" size="0.02 0.002 0.02" material="mat_screen_green"/>
+      <geom name="rack_unit1" class="lab_vis" type="box" pos="5.6 2.195 0.505" size="0.3 0.005 0.085" material="mat_instrument_dark"/>
+      <geom name="rack_led1" class="lab_vis" type="box" pos="5.36 2.188 0.5" size="0.02 0.002 0.02" material="mat_screen_green"/>
+      <geom name="rack_unit2" class="lab_vis" type="box" pos="5.6 2.195 0.725" size="0.3 0.005 0.085" material="mat_instrument_dark"/>
+      <geom name="rack_led2" class="lab_vis" type="box" pos="5.36 2.188 0.72" size="0.02 0.002 0.02" material="mat_screen_green"/>
+      <geom name="rack_unit3" class="lab_vis" type="box" pos="5.6 2.195 0.945" size="0.3 0.005 0.085" material="mat_instrument_dark"/>
+      <geom name="rack_led3" class="lab_vis" type="box" pos="5.36 2.188 0.94" size="0.02 0.002 0.02" material="mat_red"/>
+      <geom name="rack_unit4" class="lab_vis" type="box" pos="5.6 2.195 1.165" size="0.3 0.005 0.085" material="mat_instrument_dark"/>
+      <geom name="rack_led4" class="lab_vis" type="box" pos="5.36 2.188 1.16" size="0.02 0.002 0.02" material="mat_screen_green"/>
+      <geom name="rack_unit5" class="lab_vis" type="box" pos="5.6 2.195 1.385" size="0.3 0.005 0.085" material="mat_instrument_dark"/>
+      <geom name="rack_led5" class="lab_vis" type="box" pos="5.36 2.188 1.38" size="0.02 0.002 0.02" material="mat_screen_green"/>
+      <geom name="col_server_rack" class="lab_col" type="box" pos="5.6 2.593 0.8" size="0.35 0.407 0.8"/>
+    </body>
+
+    <!-- Robotics development workbench 2.00 x 0.75 x 0.75 with static bench-top arm. -->
+    <body name="robotics_bench">
+      <geom name="rbench_top" class="lab_vis" type="box" pos="1.8 -2.625 0.73" size="1 0.375 0.02" material="mat_wood"/>
+      <geom name="rbench_leg0" class="lab_vis" type="box" pos="0.85 -2.95 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="rbench_leg1" class="lab_vis" type="box" pos="2.75 -2.95 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="rbench_leg2" class="lab_vis" type="box" pos="0.85 -2.3 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="rbench_leg3" class="lab_vis" type="box" pos="2.75 -2.3 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="rbench_shelf" class="lab_vis" type="box" pos="1.8 -2.625 0.235" size="0.92 0.295 0.015" material="mat_frame"/>
+      <geom name="col_rbench" class="lab_col" type="box" pos="1.8 -2.625 0.375" size="1 0.375 0.375"/>
+      <geom name="arm_base" class="lab_vis" type="cylinder" pos="1.35 -2.65 0.79" size="0.09 0.04" material="mat_dark"/>
+      <geom name="arm_link1" class="lab_vis" type="capsule" fromto="1.35 -2.65 0.83 1.35 -2.65 1.08" size="0.035" material="mat_marking_yellow"/>
+      <geom name="arm_link2" class="lab_vis" type="capsule" fromto="1.35 -2.65 1.08 1.62 -2.55 1.18" size="0.03" material="mat_marking_yellow"/>
+      <geom name="arm_link3" class="lab_vis" type="capsule" fromto="1.62 -2.55 1.18 1.8 -2.5 1.02" size="0.022" material="mat_instrument"/>
+      <geom name="arm_gripper" class="lab_vis" type="box" pos="1.8 -2.5 0.99" size="0.03 0.02 0.02" material="mat_dark"/>
+      <geom name="col_arm" class="lab_col" type="box" pos="1.55 -2.6 0.975" size="0.3 0.15 0.225"/>
+      <geom name="monitor_r_foot" class="lab_vis" type="box" pos="2.35 -2.82 0.7575" size="0.1 0.06 0.0075" material="mat_dark"/>
+      <geom name="monitor_r_neck" class="lab_vis" type="box" pos="2.35 -2.82 0.8125" size="0.02 0.015 0.0475" material="mat_dark"/>
+      <geom name="monitor_r_panel" class="lab_vis" type="box" pos="2.35 -2.82 1.005" size="0.27 0.015 0.165" material="mat_dark"/>
+      <geom name="monitor_r_screen" class="lab_vis" type="box" pos="2.35 -2.803 1.005" size="0.255 0.002 0.15" material="mat_screen"/>
+      <geom name="col_monitor_r" class="lab_col" type="box" pos="2.35 -2.82 0.96" size="0.27 0.06 0.21"/>
+      <geom name="keyboard" class="lab_vis" type="box" pos="2.35 -2.48 0.759" size="0.2 0.07 0.009" material="mat_dark"/>
+      <geom name="spare_wheel" class="lab_vis" type="cylinder" pos="0.98 -2.4 0.77" size="0.08 0.02" material="mat_dark"/>
+    </body>
+
+    <!-- 3D printer on a stand 1.00 x 0.75 x 0.75. -->
+    <body name="printer_station">
+      <geom name="pbench_top" class="lab_vis" type="box" pos="3.9 -2.625 0.73" size="0.5 0.375 0.02" material="mat_bench_top"/>
+      <geom name="pbench_leg0" class="lab_vis" type="box" pos="3.45 -2.95 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="pbench_leg1" class="lab_vis" type="box" pos="4.35 -2.95 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="pbench_leg2" class="lab_vis" type="box" pos="3.45 -2.3 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="pbench_leg3" class="lab_vis" type="box" pos="4.35 -2.3 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="pbench_shelf" class="lab_vis" type="box" pos="3.9 -2.625 0.235" size="0.42 0.295 0.015" material="mat_frame"/>
+      <geom name="col_pbench" class="lab_col" type="box" pos="3.9 -2.625 0.375" size="0.5 0.375 0.375"/>
+      <geom name="printer_base" class="lab_vis" type="box" pos="3.9 -2.625 0.79" size="0.25 0.225 0.04" material="mat_instrument_dark"/>
+      <geom name="printer_post0" class="lab_vis" type="box" pos="3.67 -2.83 1.04" size="0.015 0.015 0.21" material="mat_frame"/>
+      <geom name="printer_post1" class="lab_vis" type="box" pos="4.13 -2.83 1.04" size="0.015 0.015 0.21" material="mat_frame"/>
+      <geom name="printer_post2" class="lab_vis" type="box" pos="3.67 -2.42 1.04" size="0.015 0.015 0.21" material="mat_frame"/>
+      <geom name="printer_post3" class="lab_vis" type="box" pos="4.13 -2.42 1.04" size="0.015 0.015 0.21" material="mat_frame"/>
+      <geom name="printer_top" class="lab_vis" type="box" pos="3.9 -2.625 1.265" size="0.25 0.225 0.015" material="mat_instrument_dark"/>
+      <geom name="printer_bed" class="lab_vis" type="box" pos="3.9 -2.625 0.9075" size="0.15 0.135 0.0075" material="mat_frame"/>
+      <geom name="printer_part" class="lab_vis" type="box" pos="3.9 -2.62 0.9525" size="0.04 0.04 0.0375" material="mat_accent"/>
+      <geom name="printer_gantry" class="lab_vis" type="box" pos="3.9 -2.635 1.135" size="0.22 0.015 0.015" material="mat_dark"/>
+      <geom name="col_printer" class="lab_col" type="box" pos="3.9 -2.625 1.015" size="0.25 0.225 0.265"/>
+    </body>
+
+    <!-- Central equipment table 1.60 x 0.80 x 0.75; corridors pass on all sides. -->
+    <body name="central_table">
+      <geom name="ctable_top" class="lab_vis" type="box" pos="3 0 0.73" size="0.8 0.4 0.02" material="mat_bench_top"/>
+      <geom name="ctable_leg0" class="lab_vis" type="box" pos="2.25 -0.35 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ctable_leg1" class="lab_vis" type="box" pos="3.75 -0.35 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ctable_leg2" class="lab_vis" type="box" pos="2.25 0.35 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ctable_leg3" class="lab_vis" type="box" pos="3.75 0.35 0.355" size="0.025 0.025 0.355" material="mat_frame"/>
+      <geom name="ctable_shelf" class="lab_vis" type="box" pos="3 0 0.235" size="0.72 0.32 0.015" material="mat_frame"/>
+      <geom name="col_ctable" class="lab_col" type="box" pos="3 0 0.375" size="0.8 0.4 0.375"/>
+      <geom name="ct_case" class="lab_vis" type="box" pos="2.55 -0.025 0.825" size="0.2 0.175 0.075" material="mat_marking_yellow"/>
+      <geom name="ct_case_band" class="lab_vis" type="box" pos="2.55 -0.025 0.8225" size="0.202 0.177 0.0075" material="mat_dark"/>
+      <geom name="ct_motor_base" class="lab_vis" type="box" pos="3.2 0 0.765" size="0.15 0.12 0.015" material="mat_dark"/>
+      <geom name="ct_motor" class="lab_vis" type="cylinder" pos="3.2 0 0.85" size="0.07 0.11" quat="0.7071068 0 0.7071068 0" material="mat_instrument"/>
+      <geom name="ct_beacon" class="lab_vis" type="cylinder" pos="3.65 0.25 0.81" size="0.035 0.06" material="mat_red"/>
+      <geom name="col_ct_items" class="lab_col" type="box" pos="3.025 0.04 0.84" size="0.675 0.26 0.09"/>
+    </body>
+
+    <!-- Storage rack 1: 0.45 deep x 1.20 wide x 1.80 high. -->
+    <body name="storage_shelf_1">
+      <geom name="shelf_1_post0" class="lab_vis" type="box" pos="6.57 -1.88 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_1_post1" class="lab_vis" type="box" pos="6.98 -1.88 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_1_post2" class="lab_vis" type="box" pos="6.57 -0.72 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_1_post3" class="lab_vis" type="box" pos="6.98 -0.72 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_1_board0" class="lab_vis" type="box" pos="6.775 -1.3 0.165" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="shelf_1_bin00" class="lab_vis" type="box" pos="6.775 -1.65 0.31" size="0.175 0.17 0.13" material="mat_bin_blue"/>
+      <geom name="shelf_1_bin01" class="lab_vis" type="box" pos="6.775 -1.28 0.27" size="0.175 0.12 0.09" material="mat_cardboard"/>
+      <geom name="shelf_1_bin02" class="lab_vis" type="box" pos="6.775 -0.93 0.33" size="0.175 0.15 0.15" material="mat_bin_grey"/>
+      <geom name="shelf_1_board1" class="lab_vis" type="box" pos="6.775 -1.3 0.665" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="shelf_1_bin10" class="lab_vis" type="box" pos="6.775 -1.65 0.81" size="0.175 0.17 0.13" material="mat_bin_blue"/>
+      <geom name="shelf_1_bin11" class="lab_vis" type="box" pos="6.775 -1.28 0.77" size="0.175 0.12 0.09" material="mat_cardboard"/>
+      <geom name="shelf_1_board2" class="lab_vis" type="box" pos="6.775 -1.3 1.165" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="shelf_1_bin20" class="lab_vis" type="box" pos="6.775 -1.65 1.31" size="0.175 0.17 0.13" material="mat_bin_blue"/>
+      <geom name="shelf_1_bin22" class="lab_vis" type="box" pos="6.775 -0.93 1.33" size="0.175 0.15 0.15" material="mat_bin_grey"/>
+      <geom name="shelf_1_board3" class="lab_vis" type="box" pos="6.775 -1.3 1.765" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="col_shelf_1" class="lab_col" type="box" pos="6.775 -1.3 0.9" size="0.225 0.6 0.9"/>
+    </body>
+
+    <!-- Storage rack 2: 0.45 deep x 1.20 wide x 1.80 high. -->
+    <body name="storage_shelf_2">
+      <geom name="shelf_2_post0" class="lab_vis" type="box" pos="6.57 -0.58 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_2_post1" class="lab_vis" type="box" pos="6.98 -0.58 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_2_post2" class="lab_vis" type="box" pos="6.57 0.58 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_2_post3" class="lab_vis" type="box" pos="6.98 0.58 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_2_board0" class="lab_vis" type="box" pos="6.775 0 0.165" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="shelf_2_bin00" class="lab_vis" type="box" pos="6.775 -0.35 0.31" size="0.175 0.17 0.13" material="mat_bin_blue"/>
+      <geom name="shelf_2_bin01" class="lab_vis" type="box" pos="6.775 0.02 0.27" size="0.175 0.12 0.09" material="mat_cardboard"/>
+      <geom name="shelf_2_board1" class="lab_vis" type="box" pos="6.775 0 0.665" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="shelf_2_bin10" class="lab_vis" type="box" pos="6.775 -0.35 0.81" size="0.175 0.17 0.13" material="mat_bin_blue"/>
+      <geom name="shelf_2_bin12" class="lab_vis" type="box" pos="6.775 0.37 0.83" size="0.175 0.15 0.15" material="mat_bin_grey"/>
+      <geom name="shelf_2_board2" class="lab_vis" type="box" pos="6.775 0 1.165" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="shelf_2_bin21" class="lab_vis" type="box" pos="6.775 0.02 1.27" size="0.175 0.12 0.09" material="mat_cardboard"/>
+      <geom name="shelf_2_bin22" class="lab_vis" type="box" pos="6.775 0.37 1.33" size="0.175 0.15 0.15" material="mat_bin_grey"/>
+      <geom name="shelf_2_board3" class="lab_vis" type="box" pos="6.775 0 1.765" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="col_shelf_2" class="lab_col" type="box" pos="6.775 0 0.9" size="0.225 0.6 0.9"/>
+    </body>
+
+    <!-- Storage rack 3: 0.45 deep x 1.20 wide x 1.80 high. -->
+    <body name="storage_shelf_3">
+      <geom name="shelf_3_post0" class="lab_vis" type="box" pos="6.57 0.72 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_3_post1" class="lab_vis" type="box" pos="6.98 0.72 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_3_post2" class="lab_vis" type="box" pos="6.57 1.88 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_3_post3" class="lab_vis" type="box" pos="6.98 1.88 0.9" size="0.02 0.02 0.9" material="mat_accent"/>
+      <geom name="shelf_3_board0" class="lab_vis" type="box" pos="6.775 1.3 0.165" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="shelf_3_bin00" class="lab_vis" type="box" pos="6.775 0.95 0.31" size="0.175 0.17 0.13" material="mat_bin_blue"/>
+      <geom name="shelf_3_bin02" class="lab_vis" type="box" pos="6.775 1.67 0.33" size="0.175 0.15 0.15" material="mat_bin_grey"/>
+      <geom name="shelf_3_board1" class="lab_vis" type="box" pos="6.775 1.3 0.665" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="shelf_3_bin11" class="lab_vis" type="box" pos="6.775 1.32 0.77" size="0.175 0.12 0.09" material="mat_cardboard"/>
+      <geom name="shelf_3_bin12" class="lab_vis" type="box" pos="6.775 1.67 0.83" size="0.175 0.15 0.15" material="mat_bin_grey"/>
+      <geom name="shelf_3_board2" class="lab_vis" type="box" pos="6.775 1.3 1.165" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="shelf_3_bin20" class="lab_vis" type="box" pos="6.775 0.95 1.31" size="0.175 0.17 0.13" material="mat_bin_blue"/>
+      <geom name="shelf_3_bin21" class="lab_vis" type="box" pos="6.775 1.32 1.27" size="0.175 0.12 0.09" material="mat_cardboard"/>
+      <geom name="shelf_3_bin22" class="lab_vis" type="box" pos="6.775 1.67 1.33" size="0.175 0.15 0.15" material="mat_bin_grey"/>
+      <geom name="shelf_3_board3" class="lab_vis" type="box" pos="6.775 1.3 1.765" size="0.225 0.6 0.015" material="mat_frame"/>
+      <geom name="col_shelf_3" class="lab_col" type="box" pos="6.775 1.3 0.9" size="0.225 0.6 0.9"/>
+    </body>
+
+    <!-- Closed cabinet 0.50 x 1.00 x 1.50 in the south-east corner. -->
+    <body name="tool_cabinet">
+      <geom name="cabinet_body" class="lab_vis" type="box" pos="6.1 -2.75 0.75" size="0.5 0.25 0.75" material="mat_bin_grey"/>
+      <geom name="cabinet_seam" class="lab_vis" type="box" pos="6.1 -2.499 0.75" size="0.005 0.003 0.7" material="mat_dark"/>
+      <geom name="cabinet_handle603" class="lab_vis" type="box" pos="6.03 -2.487 0.85" size="0.012 0.0125 0.1" material="mat_dark"/>
+      <geom name="cabinet_handle617" class="lab_vis" type="box" pos="6.17 -2.487 0.85" size="0.012 0.0125 0.1" material="mat_dark"/>
+      <geom name="col_tool_cabinet" class="lab_col" type="box" pos="6.1 -2.737 0.75" size="0.5 0.2625 0.75"/>
+    </body>
+
+    <!-- Fire extinguisher and sign beside the entrance. -->
+    <body name="safety_point">
+      <geom name="extinguisher" class="lab_vis" type="cylinder" pos="-0.87 1.15 0.33" size="0.08 0.25" material="mat_red"/>
+      <geom name="extinguisher_valve" class="lab_vis" type="cylinder" pos="-0.87 1.15 0.615" size="0.025 0.035" material="mat_dark"/>
+      <geom name="safety_sign" class="lab_vis" type="box" pos="-0.995 1.15 0.84" size="0.005 0.15 0.12" material="mat_red"/>
+      <geom name="col_extinguisher" class="lab_col" type="box" pos="-0.89 1.15 0.325" size="0.11 0.09 0.325"/>
+    </body>
+
+    <!-- Navigation sites. Site local +X is the desired robot heading. z=0.01 is a floor marker, not a trunk height. Group 4: hidden by default. -->
+    <body name="lab_sites">
+      <site group="4" size="0.06" name="nav_start" pos="0 0 0.01" quat="1.0000000 0 0 0.0000000" rgba="0.1 0.6 1 0.9"/>
+      <site group="4" size="0.06" name="nav_outside" pos="-2 0 0.01" quat="1.0000000 0 0 0.0000000" rgba="0.1 0.6 1 0.9"/>
+      <site group="4" size="0.06" name="nav_entrance" pos="-1.05 0 0.01" quat="1.0000000 0 0 0.0000000" rgba="0.1 0.6 1 0.9"/>
+      <site group="4" size="0.06" name="nav_wp_west" pos="1.2 0 0.01" quat="1.0000000 0 0 0.0000000" rgba="0.1 0.6 1 0.9"/>
+      <site group="4" size="0.06" name="nav_wp_northwest" pos="1.2 1.3 0.01" quat="1.0000000 0 0 0.0000000" rgba="0.1 0.6 1 0.9"/>
+      <site group="4" size="0.06" name="nav_wp_northeast" pos="4.8 1.3 0.01" quat="1.0000000 0 0 0.0000000" rgba="0.1 0.6 1 0.9"/>
+      <site group="4" size="0.06" name="nav_wp_east" pos="5 0 0.01" quat="1.0000000 0 0 0.0000000" rgba="0.1 0.6 1 0.9"/>
+      <site group="4" size="0.06" name="nav_wp_southeast" pos="4.8 -1.3 0.01" quat="1.0000000 0 0 0.0000000" rgba="0.1 0.6 1 0.9"/>
+      <site group="4" size="0.06" name="nav_wp_southwest" pos="1.2 -1.3 0.01" quat="1.0000000 0 0 0.0000000" rgba="0.1 0.6 1 0.9"/>
+      <site group="4" size="0.06" name="inspect_electronics_a" pos="1.6 1.6 0.01" quat="0.7071068 0 0 0.7071068" rgba="1 0.55 0 0.9"/>
+      <site group="4" size="0.06" name="inspect_electronics_b" pos="3.8 1.6 0.01" quat="0.7071068 0 0 0.7071068" rgba="1 0.55 0 0.9"/>
+      <site group="4" size="0.06" name="inspect_server_rack" pos="5.6 1.55 0.01" quat="0.7071068 0 0 0.7071068" rgba="1 0.55 0 0.9"/>
+      <site group="4" size="0.06" name="inspect_robotics_bench" pos="1.8 -1.6 0.01" quat="0.7071068 0 0 -0.7071068" rgba="1 0.55 0 0.9"/>
+      <site group="4" size="0.06" name="inspect_printer" pos="3.9 -1.6 0.01" quat="0.7071068 0 0 -0.7071068" rgba="1 0.55 0 0.9"/>
+      <site group="4" size="0.06" name="inspect_storage" pos="5.9 0 0.01" quat="1.0000000 0 0 0.0000000" rgba="1 0.55 0 0.9"/>
+      <site group="4" size="0.06" name="inspect_central_table" pos="1.55 0 0.01" quat="1.0000000 0 0 0.0000000" rgba="1 0.55 0 0.9"/>
+      <site group="4" size="0.06" name="target_electronics_a" pos="1.05 2.72 0.86" rgba="1 0 1 0.9"/>
+      <site group="4" size="0.06" name="target_electronics_b" pos="4.2 2.78 1" rgba="1 0 1 0.9"/>
+      <site group="4" size="0.06" name="target_server_rack" pos="5.6 2.18 0.92" rgba="1 0 1 0.9"/>
+      <site group="4" size="0.06" name="target_robotics_bench" pos="1.62 -2.55 1.12" rgba="1 0 1 0.9"/>
+      <site group="4" size="0.06" name="target_printer" pos="3.9 -2.5 1" rgba="1 0 1 0.9"/>
+      <site group="4" size="0.06" name="target_storage" pos="6.55 0 0.9" rgba="1 0 1 0.9"/>
+      <site group="4" size="0.06" name="target_central_table" pos="2.35 0 0.85" rgba="1 0 1 0.9"/>
+    </body>
+  </worldbody>
+</mujocoinclude>

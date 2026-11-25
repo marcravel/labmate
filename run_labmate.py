@@ -15,6 +15,10 @@ from booster_deploy.utils.registry import get_task
 from robot_control.labmate_controller import LabMateController
 from robot_control.waypoint_navigator import WaypointNavigator
 
+# Importing this registers the "labmate_inspection" task: the stock k1_walk
+# config with the robot spawned inside the LabMate laboratory scene.
+from shared.task_cfg import TASK_NAME
+
 # Define Lab Inspection Route
 PATROL_ROUTE = [
     {"name": "Station 1 (Chemical Storage)", "x": 1.20, "y": 0.00, "yaw": 0.00},
@@ -36,7 +40,7 @@ def main():
     print("  LabMate - Autonomous Waypoint Navigation (Milestone 3)")
     print("=" * 60)
 
-    task_cfg = get_task("k1_walk")
+    task_cfg = get_task(TASK_NAME)
     task_cfg.policy.device = "cpu"
 
     controller = LabMateController(task_cfg)

@@ -1,0 +1,29 @@
+<mujoco model="labmate">
+  <!--
+    LabMate scene entry point. This is the model MujocoController loads.
+
+    Composition order matters: the robot is included first so that every robot
+    body, geom, joint, actuator and sensor keeps the same ID slot it has in the
+    bare K1 model. tests/check_scene.py asserts that invariant - the walking
+    policy must see exactly the model it was trained against.
+
+    Mesh resolution: K1_22dof.xml declares meshdir="meshes/", which MuJoCo
+    resolves against the directory of the top-level model file - this one.
+    The <compiler> below therefore re-points meshdir at the real K1 mesh
+    directory. It must stay AFTER the include: for duplicate top-level
+    <compiler> elements MuJoCo keeps the last one.
+  -->
+  <include file="../../external/booster_assets/robots/K1/K1_22dof.xml"/>
+  <compiler meshdir="../../external/booster_assets/robots/K1/meshes/"/>
+
+  <include file="lab_environment.xml"/>
+
+  <!-- Viewer and rendering settings only; no effect on physics. -->
+  <statistic center="3 0 0.5" extent="6"/>
+  <visual>
+    <headlight ambient="0.25 0.25 0.25" diffuse="0.2 0.2 0.2" specular="0 0 0"/>
+    <global azimuth="55" elevation="-40" offwidth="1600" offheight="1000"/>
+    <quality shadowsize="4096"/>
+    <map znear="0.05" shadowclip="1.2"/>
+  </visual>
+</mujoco>
