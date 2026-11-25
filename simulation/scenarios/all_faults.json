@@ -68,6 +68,17 @@
       "material": "mat_dark",
       "visible": true
     },
+    "printer_ext_body": {
+      "visible": false
+    },
+    "printer_ext_obstruction": {
+      "material": "mat_cardboard",
+      "visible": true
+    },
+    "printer_ext_obstruction_tape": {
+      "material": "mat_wood",
+      "visible": true
+    },
     "chem_door_l": {
       "material": "mat_chem_yellow",
       "pos": [

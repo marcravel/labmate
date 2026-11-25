@@ -66,6 +66,16 @@
     "freezer_cable_dropped": {
       "visible": false
     },
+    "printer_ext_body": {
+      "material": "mat_red",
+      "visible": true
+    },
+    "printer_ext_obstruction": {
+      "visible": false
+    },
+    "printer_ext_obstruction_tape": {
+      "visible": false
+    },
     "chem_door_l": {
       "material": "mat_chem_yellow",
       "pos": [

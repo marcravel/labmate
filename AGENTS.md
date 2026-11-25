@@ -63,6 +63,8 @@ These constraints must not be violated under any circumstances.
 16. **An inspection check must be able to both pass and fail.** `tests/test_inspection.py` asserts this across the scenario set. A check that reads a geom no scenario ever changes reports PASS forever, which is worse than having no check at all. Add the fault state to a scenario in the same change as the check.
 17. **Inspection checks read the simulation, never the scenario file.** A scenario arranges the lab; checks then observe it, exactly as a camera-based detector would. Do not shortcut a verdict by reading the scenario's declared state — that would make every check tautologically true and defeat the later swap to real perception.
 18. **Do not present a scenario's `panel` readings as measurements.** They are labels for the state the scenario set up, not simulated physics. Reports must keep saying so.
+19. **A `panel` key is global, not per-station.** `shared/inspection_report.py` looks up `panel[check.key]`, so two stations sharing a check key would print each other's declared reading. Check keys only have to be unique *within* a station for `validate()` to pass, so this will not be caught by a test. Either give a new check a distinct key, or give it no `panel` entry at all.
+20. **Geom names are global across the whole scene.** The laboratory and the K1 model compile into one namespace, and MuJoCo rejects a duplicate outright. Prefix a new station's geoms with the station (`printer_ext_*`), rather than with the object, or a second extinguisher collides with the first.
 
 ---
 
@@ -76,7 +78,7 @@ This table identifies the actual file, class, and function responsible for each 
 | **Task registration** | `external/booster_deploy/booster_deploy/utils/registry.py` | `register_task()` / `get_task()` | `name="k1_walk"` (stock), `name="labmate_inspection"` (LabMate) |
 | **LabMate task config** | `shared/task_cfg.py` | `LabMateInspectionTaskCfg` | Overrides only `robot.mjcf_path` → `LAB_SCENE_PATH`. Everything else inherited. |
 | **Scene composition** | `simulation/scenes/labmate_scene.xml` | — | Includes `K1_22dof.xml` first, then `lab_environment.xml`; re-points `meshdir`. Robot must come first. |
-| **Laboratory geometry** | `simulation/scenes/lab_environment.xml` | — | 15 static bodies, 197 geoms, 23 sites. `lab_vis` = visual, `lab_col` = collision. No joints, no DOF. |
+| **Laboratory geometry** | `simulation/scenes/lab_environment.xml` | — | 16 static bodies, 215 geoms, 24 sites. `lab_vis` = visual, `lab_col` = collision. No joints, no DOF. |
 | **Navigation graph** | `robot_control/route_graph.py` | `RouteGraph.__init__()` | Reads `nav_*` / `inspect_*` sites from `mj_model`. Heading from the site quaternion. |
 | **Route connectivity** | `robot_control/route_graph.py` | `ROUTE_EDGES` | 16 undirected edges. **Single source of truth** — `tests/check_scene.py` imports it. |
 | **Route planning** | `robot_control/route_graph.py` | `plan()` / `route()` / `patrol_route()` | BFS. `DEFAULT_STATION_ORDER` gives the perimeter round. |
@@ -97,7 +99,7 @@ This table identifies the actual file, class, and function responsible for each 
 | **Main simulation loop** | `external/booster_deploy/booster_deploy/controllers/mujoco_controller.py` | `MujocoController.run()` | `update_state → policy_step → ctrl_step` at 50 Hz |
 | **Navigator injection** | `robot_control/labmate_controller.py` | `LabMateController.set_navigator()` | stores callable `navigator(controller, elapsed)` |
 | **Navigator callback call** | `robot_control/labmate_controller.py` | `LabMateController.policy_step()` | calls `self.navigator(self, elapsed)` before `super().policy_step()` |
-| **Inspection checklist** | `shared/inspection.py` | `STATIONS`, `STATION_ORDER` | 5 stations, 12 checks. **Single source of truth** for what is inspected and in what order; `route_graph.DEFAULT_STATION_ORDER` imports `STATION_ORDER`. |
+| **Inspection checklist** | `shared/inspection.py` | `STATIONS`, `STATION_ORDER` | 6 stations, 14 checks. **Single source of truth** for what is inspected and in what order; `route_graph.DEFAULT_STATION_ORDER` imports `STATION_ORDER`. |
 | **Check primitives** | `shared/inspection.py` | `IndicatorsNominal`, `PoseUnchanged`, `HeightAtMost`, `Absent`, `Present` | Each reads `mj_model` geom material / pose / rgba. |
 | **Checklist validation** | `shared/inspection.py` | `validate(model)` | Called at startup by `run_labmate.py`; fails loudly if a station site or state geom is missing. |
 | **Scenario load / apply** | `shared/scenario.py` | `load()`, `apply()`, `_check_writable()` | Refuses robot geoms and collision geoms. `DEFAULT_SCENARIO = "nominal"`. |

@@ -209,7 +209,7 @@
     </body>
 
     <!--
-      INSPECTION STATION 5 - Flammables storage cabinet.
+      INSPECTION STATION 6 - Flammables storage cabinet.
       Viewed from inspect_robotics_bench (1.8, -1.6) facing -Y.
       Standard: 29 CFR 1910.1450 (Laboratory Standard); secondary containment.
       Checked: both doors latched, and no liquid outside the containment tray.
@@ -270,6 +270,33 @@
       <geom name="printer_part" class="lab_vis" type="box" pos="3.9 -2.62 0.9525" size="0.04 0.04 0.0375" material="mat_accent"/>
       <geom name="printer_gantry" class="lab_vis" type="box" pos="3.9 -2.635 1.135" size="0.22 0.015 0.015" material="mat_dark"/>
       <geom name="col_printer" class="lab_col" type="box" pos="3.9 -2.625 1.015" size="0.25 0.225 0.265"/>
+    </body>
+
+    <!--
+      INSPECTION STATION 5 - Portable fire extinguisher serving the 3D-printer bay.
+      Viewed from inspect_printer (3.9, -1.6) facing -Y; the unit is mounted on the
+      south wall at x=4.50, about 0.6 m off that sight line.
+      Standard: OSHA 29 CFR 1910.157(e)(2) and NFPA 10 4-3.1 - visual inspection at
+      30-day intervals. The only item in this laboratory whose inspection interval is
+      set by federal regulation rather than local policy.
+      Checked: the unit is in its bracket, and access to it is unobstructed.
+      State geoms: printer_ext_body (visibility), printer_ext_obstruction (visibility).
+      The bracket and the wall sign stay visible in every scenario, so a hidden body
+      reads as "missing from its bracket" rather than as nothing being there at all.
+      Mounted below z=1.0: wall_south is only drawn 1.0 m tall, so anything higher
+      would float with no wall behind it.
+    -->
+    <body name="printer_fire_point">
+      <geom name="printer_ext_sign" class="lab_vis" type="box" pos="4.5 -2.992 0.98" size="0.11 0.006 0.085" material="mat_red"/>
+      <geom name="printer_ext_bracket" class="lab_vis" type="box" pos="4.5 -2.935 0.7" size="0.05 0.035 0.05" material="mat_dark"/>
+      <geom name="printer_ext_body" class="lab_vis" type="cylinder" pos="4.5 -2.885 0.7" size="0.075 0.235" material="mat_red"/>
+      <geom name="printer_ext_valve" class="lab_vis" type="cylinder" pos="4.5 -2.885 0.96" size="0.024 0.032" material="mat_dark"/>
+      <!-- Floor keep-clear zone, then the obstruction that violates it.
+           printer_ext_obstruction is hidden in the nominal scenario. Visual only:
+           the robot must see and report it, not collide with it. -->
+      <geom name="printer_ext_keepclear" class="lab_vis" type="box" pos="4.5 -2.6 0.00175" size="0.3 0.26 0.00025" material="mat_marking_yellow"/>
+      <geom name="printer_ext_obstruction" class="lab_vis" type="box" pos="4.5 -2.58 0.22" size="0.26 0.22 0.22" material="mat_cardboard"/>
+      <geom name="printer_ext_obstruction_tape" class="lab_vis" type="box" pos="4.5 -2.58 0.3" size="0.262 0.222 0.022" material="mat_wood"/>
     </body>
 
     <!-- Central equipment table 1.60 x 0.80 x 0.75; corridors pass on all sides. -->
@@ -411,6 +438,7 @@
       <site group="4" size="0.06" name="target_server_rack" pos="5.6 2.18 0.92" rgba="1 0 1 0.9"/>
       <site group="4" size="0.06" name="target_robotics_bench" pos="1.62 -2.55 1.12" rgba="1 0 1 0.9"/>
       <site group="4" size="0.06" name="target_printer" pos="3.9 -2.5 1" rgba="1 0 1 0.9"/>
+      <site group="4" size="0.06" name="target_printer_extinguisher" pos="4.5 -2.8 0.7" rgba="1 0 1 0.9"/>
       <site group="4" size="0.06" name="target_storage" pos="6.55 0 0.9" rgba="1 0 1 0.9"/>
       <site group="4" size="0.06" name="target_central_table" pos="2.35 0 0.85" rgba="1 0 1 0.9"/>
     </body>

@@ -52,7 +52,7 @@ flowchart TD
     MJ["MuJoCo Physics\nlabmate_scene.xml · 500 Hz\n(K1_22dof.xml + lab_environment.xml)"]
     RD["RobotData\njoint_pos · joint_vel · root_pos_w · root_quat_w"]
     SCN["Scenario\n(shared/scenario.py)\nsimulation/scenarios/*.json"]
-    INS["Inspection checklist\n(shared/inspection.py)\n5 stations · 12 checks"]
+    INS["Inspection checklist\n(shared/inspection.py)\n6 stations · 14 checks"]
     REP["InspectionRun\n(shared/inspection_report.py)\nreport + JSON"]
 
     PERC["perception/\n⚠ NOT IMPLEMENTED"]
@@ -125,11 +125,12 @@ LabMate/
 │       ├── labmate_scene.xml   ← Scene entry point. ← LOADED BY SIM
 │       │                         Includes K1_22dof.xml, then lab_environment.xml,
 │       │                         and re-points meshdir at the Booster meshes.
-│       └── lab_environment.xml ← Laboratory: 15 static bodies, 252 geoms,
-│                                 23 sites (9 nav_, 7 inspect_, 7 target_).
-│                                 Five stations carry inspectable state: eyewash,
-│                                 fume hood, status rack, -80 C freezer, flammables
-│                                 cabinet. Adds no joints, actuators or DOF.
+│       └── lab_environment.xml ← Laboratory: 16 static bodies, 215 geoms,
+│                                 24 sites (9 nav_, 7 inspect_, 8 target_).
+│                                 Six stations carry inspectable state: eyewash,
+│                                 fume hood, status rack, -80 C freezer, fire
+│                                 extinguisher, flammables cabinet. Adds no
+│                                 joints, actuators or DOF.
 │   └── scenarios/              ← Lab state for a run. nominal / demo_findings /
 │                                 all_faults. Visual geoms only.
 │
@@ -140,7 +141,7 @@ LabMate/
 │   ├── task_cfg.py             ← LabMateInspectionTaskCfg. Registers the
 │   │                             "labmate_inspection" task: k1_walk with
 │   │                             robot.mjcf_path pointing at labmate_scene.xml.
-│   ├── inspection.py           ← The checklist: 5 stations, 12 checks, severities.
+│   ├── inspection.py           ← The checklist: 6 stations, 14 checks, severities.
 │   │                             Single source of truth for what is inspected and
 │   │                             in what order. Checks read the simulation.
 │   ├── scenario.py             ← Loads simulation/scenarios/*.json and applies it.
@@ -313,11 +314,12 @@ At each station the robot stops, turns to face the equipment, and runs that stat
 ========================================================================
 Scenario: nominal - All clear
           7 geom state change(s) applied
-Route: 19 waypoints, 5 inspection stations
+Route: 21 waypoints, 6 inspection stations
   - Emergency eyewash and drench shower  [ANSI/ISEA Z358.1, weekly activation]
   - Chemical fume hood  [ASHRAE 110 / local sash policy, continuous]
   - Equipment status panel  [local maintenance policy, continuous]
   - Ultra-low temperature sample freezer  [CAP/CLIA; CDC storage guidance, daily]
+  - Portable fire extinguisher  [29 CFR 1910.157(e)(2); NFPA 10 4-3.1, monthly (30-day intervals)]
   - Flammables storage cabinet  [29 CFR 1910.1450, routine]
 Launching autonomous patrol...
 [MuJoCo] Controls: Space=pause/resume.
@@ -329,15 +331,15 @@ Launching autonomous patrol...
           !! Face velocity monitor reads in range: indicator in alarm
 ```
 
-A full round is 19 waypoints and takes about 153 s of simulated time, which the viewer runs in real time.
+A full round is 21 waypoints and takes about 172 s of simulated time, which the viewer runs in real time.
 
 #### Scenarios
 
 A scenario arranges the laboratory's inspectable state before the run, so a demo can be shot twice — once all-clear, once with findings — from one build and one route, with nothing else changed. Both takes walk the identical path in the identical time.
 
 ```bash
-python run_labmate.py                              # nominal (default): all five stations pass
-python run_labmate.py --scenario demo_findings     # 2 findings: open fume hood sash, freezer excursion
+python run_labmate.py                              # nominal (default): all six stations pass
+python run_labmate.py --scenario demo_findings     # 3 findings: fume hood sash, freezer excursion, extinguisher blocked
 python run_labmate.py --scenario all_faults        # every check failing (a test fixture, not a demo)
 python run_labmate.py --scenario demo_findings --report round.json
 ```
@@ -479,14 +481,14 @@ Do not call `policy.inference()`, `ctrl_step()`, or write to `robot.data` from a
 | K1 robot model | ✅ Implemented | 22-DOF MJCF loaded from booster_assets. Full joint/body hierarchy. |
 | Official walking policy | ✅ Implemented | `k1_walk.pt` loaded via TorchScript. 50 Hz inference. Unmodified. |
 | Velocity command interface | ✅ Implemented | `set_velocity()`, `stop_robot()`, `get_robot_pose()` in `velocity_interface.py`. |
-| Lab environment (scene) | ✅ Implemented | `simulation/scenes/`: 15 static bodies, 252 geoms, 7 inspection sites. Five carry inspectable state. Adds no DOF. |
+| Lab environment (scene) | ✅ Implemented | `simulation/scenes/`: 16 static bodies, 215 geoms, 7 inspection sites. Six carry inspectable state. Adds no DOF. |
 | Navigation graph | ✅ Implemented | `RouteGraph` reads `nav_*`/`inspect_*` sites from the model; BFS over `ROUTE_EDGES`. |
 | Waypoint navigator | ✅ Implemented | `WaypointNavigator`: closed-loop heading control during approach, position + yaw tolerance, inspection pause. |
 | Navigator ↔ controller integration | ✅ Implemented | Callback pattern wired in `run_labmate.py`. |
 | Shared config | ✅ Implemented | `shared/task_cfg.py` (task override), `shared/inspection.py` (checklist schema), `shared/scenario.py`, `shared/inspection_report.py`. |
 | Automated tests | ✅ Implemented | `tests/check_scene.py`, `tests/test_route_graph.py`, `tests/test_inspection.py`. Standalone scripts, no pytest. |
 | Camera / image acquisition | ⬜ Planned | No `<camera>` exists in any MJCF. The K1 head carries empty mount frames only. Checks currently read geom state directly, not pixels. |
-| Inspection logic | ✅ Implemented | `shared/inspection.py`: 5 stations, 12 checks, read from the simulation's geom state. Verdicts PASS/ADVISORY/FINDING/CRITICAL. |
+| Inspection logic | ✅ Implemented | `shared/inspection.py`: 6 stations, 14 checks, read from the simulation's geom state. Verdicts PASS/ADVISORY/FINDING/CRITICAL. One station — the portable fire extinguisher — is governed by federal regulation (29 CFR 1910.157(e)(2), NFPA 10) rather than local policy. |
 | Scenario system | ✅ Implemented | `shared/scenario.py` + `simulation/scenarios/*.json`. Arranges lab state; refuses robot and collision geoms. |
 | Inspection reporting | ✅ Implemented | `shared/inspection_report.py`: per-station verdicts, round summary, action list, JSON export via `--report`. |
 | Perception subsystem | ⬜ Planned | `perception/` is empty. OpenCV is installed but unused. |

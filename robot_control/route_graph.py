@@ -59,10 +59,14 @@ report lists have to be the same thing, and two literals would drift. The
 checklist is the source of truth for *which* stations exist and in what order;
 ``ROUTE_EDGES`` remains the source of truth for how to get between them.
 
-``inspect_central_table`` and ``inspect_printer`` are deliberately not on the
-round. Both are still sites in the model with validated, swept edges, so either
-can be added to a checklist later without any navigation work - the table is
-furniture with no inspectable state, and the printer is held as a spare."""
+``inspect_central_table`` is deliberately not on the round: it is furniture with
+no inspectable state. It stays in the model with validated, swept edges so it can
+be added to a checklist later without any navigation work.
+
+``inspect_printer`` was held as that kind of spare and has now been spent on the
+fire-extinguisher station. Adding a station there cost no edge, no site and no
+change to this module - which is the clearest evidence that the checklist and the
+navigation graph are genuinely separable."""
 
 
 def quat_to_yaw(q) -> float:

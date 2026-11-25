@@ -214,13 +214,14 @@ class Present(Check):
 
     geom: str = ""
     absent_as: str = "missing"
+    present_as: str = "connected"
 
     def geoms(self) -> tuple[str, ...]:
         return (self.geom,)
 
     def observe(self, model, data):
         hidden = _is_hidden(model, self.geom)
-        return not hidden, self.absent_as if hidden else "connected"
+        return not hidden, self.absent_as if hidden else self.present_as
 
 
 # --------------------------------------------------------------------------
@@ -339,6 +340,29 @@ STATIONS: tuple[Station, ...] = (
         ),
     ),
     Station(
+        site="inspect_printer",
+        label="Portable fire extinguisher",
+        standard="29 CFR 1910.157(e)(2); NFPA 10 4-3.1",
+        cadence="monthly (30-day intervals)",
+        checks=(
+            Present(
+                key="unit_present",
+                description="Extinguisher is mounted in its bracket",
+                severity=CRITICAL,
+                geom="printer_ext_body",
+                absent_as="missing from bracket",
+                present_as="in its bracket",
+            ),
+            Absent(
+                key="access_clear",
+                description="Access to the extinguisher is unobstructed",
+                severity=FINDING,
+                geom="printer_ext_obstruction",
+                present_as="access obstructed",
+            ),
+        ),
+    ),
+    Station(
         site="inspect_robotics_bench",
         label="Flammables storage cabinet",
         standard="29 CFR 1910.1450",
@@ -373,8 +397,8 @@ BY_SITE: dict[str, Station] = {s.site: s for s in STATIONS}
 
 STATION_ORDER: tuple[str, ...] = tuple(s.site for s in STATIONS)
 """Checklist order, chosen to read as a round: north-west, north, north-east,
-east, south-west. ``robot_control.route_graph.DEFAULT_STATION_ORDER`` follows
-it, so the walked order and the reported order cannot drift apart."""
+east, south-east, south-west. ``robot_control.route_graph.DEFAULT_STATION_ORDER``
+follows it, so the walked order and the reported order cannot drift apart."""
 
 
 def all_state_geoms() -> tuple[str, ...]:

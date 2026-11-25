@@ -35,9 +35,9 @@ LAB_SCENE = PROJECT_ROOT / "simulation" / "scenes" / "labmate_scene.xml"
 
 # What each scenario must produce. Station severities in checklist order.
 EXPECTED = {
-    "nominal": [PASS, PASS, PASS, PASS, PASS],
-    "demo_findings": [PASS, FINDING, PASS, CRITICAL, PASS],
-    "all_faults": [FINDING, FINDING, FINDING, CRITICAL, FINDING],
+    "nominal": [PASS, PASS, PASS, PASS, PASS, PASS],
+    "demo_findings": [PASS, FINDING, PASS, CRITICAL, FINDING, PASS],
+    "all_faults": [FINDING, FINDING, FINDING, CRITICAL, CRITICAL, FINDING],
 }
 
 fails = 0
@@ -115,8 +115,8 @@ for name, expected in EXPECTED.items():
         check("scenario 'nominal': overall PASS and no findings",
               run.severity == PASS and not run.findings)
     if name == "demo_findings":
-        check("scenario 'demo_findings': exactly 2 stations flagged",
-              sum(r.severity != PASS for r in run.results) == 2,
+        check("scenario 'demo_findings': exactly 3 stations flagged",
+              sum(r.severity != PASS for r in run.results) == 3,
               str(got))
         check("scenario 'demo_findings': the critical station is the freezer",
               next(r.site for r in run.results if r.severity == CRITICAL)

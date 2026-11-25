@@ -1,7 +1,7 @@
 {
   "name": "demo_findings",
-  "title": "Two findings - the pitch take",
-  "notes": "Station 2 raises a compliance and energy finding (sash left open). Station 4 raises the critical one (temperature excursion, door ajar, alarm cable disconnected). Stations 1, 3 and 5 stay clear, so the round reads pass - finding - pass - critical - pass.",
+  "title": "Three findings - the pitch take",
+  "notes": "Station 2 raises a compliance and energy finding (sash left open). Station 4 raises the critical one (temperature excursion, door ajar, alarm cable disconnected). Station 5 raises the regulated one: the fire extinguisher is in its bracket but a carton blocks access to it, which is the single most common real-world failure of 29 CFR 1910.157. Stations 1, 3 and 6 stay clear, so the round reads pass - finding - pass - critical - finding - pass.",
   "geoms": {
     "eyewash_tag": {
       "material": "mat_screen_green"
@@ -64,6 +64,18 @@
     },
     "freezer_cable_dropped": {
       "material": "mat_dark",
+      "visible": true
+    },
+    "printer_ext_body": {
+      "material": "mat_red",
+      "visible": true
+    },
+    "printer_ext_obstruction": {
+      "material": "mat_cardboard",
+      "visible": true
+    },
+    "printer_ext_obstruction_tape": {
+      "material": "mat_wood",
       "visible": true
     },
     "chem_door_l": {

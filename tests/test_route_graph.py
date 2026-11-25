@@ -65,9 +65,10 @@ site_nodes = {
 check("graph nodes are exactly the nav_/inspect_ sites in the model",
       set(graph.nodes) == site_nodes,
       f"{len(graph.nodes)} nodes vs {len(site_nodes)} sites")
-# Not every inspection site is on the round. Sites with no checklist entry
-# (the central table, the printer) stay in the model with validated, swept
-# edges so they can be added to a checklist later without navigation work.
+# Not every inspection site is on the round. A site with no checklist entry
+# (the central table) stays in the model with validated, swept edges so it can
+# be added to a checklist later without navigation work -- which is exactly how
+# inspect_printer became the fire-extinguisher station: no navigation change.
 check(f"{len(graph.stations)} inspection sites in the model, "
       f"{len(DEFAULT_STATION_ORDER)} on the round",
       set(DEFAULT_STATION_ORDER) <= set(graph.stations),
@@ -88,7 +89,7 @@ for wp in route:
 check("every waypoint position comes from its site in the model", not bad,
       str(bad) if bad else "")
 
-# 4. The route actually inspects all seven stations, once each
+# 4. The route actually inspects every station on the round, once each
 visited = [wp["name"] for wp in route if wp["inspect"]]
 check("all stations visited exactly once",
       sorted(visited) == sorted(DEFAULT_STATION_ORDER) and
