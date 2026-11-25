@@ -17,10 +17,7 @@ class LabMateController(MujocoController):
         pass
 
     def policy_step(self):
-        if self._sim_start_time is None:
-            self._sim_start_time = time.time()
-
-        elapsed = time.time() - self._sim_start_time
+        elapsed = self._elapsed_s
 
         if self.navigator is not None:
             self.navigator(self, elapsed)
