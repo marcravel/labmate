@@ -82,13 +82,15 @@ for n, p in P.items():
         if h: bad.setdefault(n, set()).update(h)
 check(f"{len(P)} sites: turn in place, arms out, no obstacle contact", not bad, str(bad) if bad else "")
 
-# 4. Route edges, sampled every 2 cm, heading along the edge
-loop = ["west", "northwest", "northeast", "east", "southeast", "southwest", "west"]
-E = [("nav_outside", "nav_entrance"), ("nav_entrance", "nav_start"), ("nav_start", "nav_wp_west")]
-E += [("nav_wp_"+a, "nav_wp_"+b) for a, b in zip(loop, loop[1:])]
-E += [("nav_wp_"+w, "inspect_"+s) for w, s in [
-    ("northwest", "electronics_a"), ("northeast", "electronics_b"), ("northeast", "server_rack"),
-    ("southwest", "robotics_bench"), ("southeast", "printer"), ("east", "storage"), ("west", "central_table")]]
+# 4. Route edges, sampled every 2 cm, heading along the edge.
+# Edges come from robot_control.route_graph so the planner and this validator
+# cannot disagree about which routes are cleared. Both directions are swept:
+# the planner treats edges as undirected, and every spur to an inspection site
+# has to be walked back out again.
+sys.path.insert(0, str(PROJECT_ROOT))
+from robot_control.route_graph import ROUTE_EDGES  # noqa: E402
+
+E = [e for a, b in ROUTE_EDGES for e in ((a, b), (b, a))]
 boxes = []
 mujoco.mj_forward(lab, d)
 for g in range(base.ngeom, lab.ngeom):
@@ -105,7 +107,7 @@ for a, b in E:
         if lab_hits(): bad.append((a, b)); break
         low = min(low, clearance(p))
     worst = min(worst, (low[0], f"{a} -> {b}, nearest {low[1]}"))
-check(f"{len(E)} route edges, arms out, no obstacle contact", not bad, str(bad) if bad else "")
+check(f"{len(E)} route edges (both directions), arms out, no obstacle contact", not bad, str(bad) if bad else "")
 check("min distance, route centreline to obstacle >= 0.60 m", worst[0] >= 0.60, f"{worst[0]:.3f} m on {worst[1]}")
 
 # 5. Spawn: only floor/self contacts at the start pose

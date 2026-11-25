@@ -12,12 +12,20 @@ def normalize_angle(angle):
 
 
 class WaypointNavigator:
-    def __init__(self, waypoints, pos_tolerance=0.25, yaw_tolerance=0.20):
+    def __init__(self, waypoints, pos_tolerance=0.25, yaw_tolerance=0.20,
+                 heading_gain=1.1, realign_tol=0.35, yaw_rate_max=0.45):
         self.waypoints = waypoints
         self.current_idx = 0
         self.pos_tol = pos_tolerance
         self.yaw_tol = yaw_tolerance
         self.turn_tol = min(0.08, yaw_tolerance)
+        # Closed-loop heading control while walking. Without this the APPROACH
+        # phase commanded a zero turn rate, so the robot walked on whatever
+        # heading it happened to hold and gait drift was never corrected - it
+        # could miss a waypoint entirely and walk into a wall.
+        self.heading_gain = heading_gain
+        self.realign_tol = realign_tol
+        self.yaw_rate_max = yaw_rate_max
         self.pause_start_time = None
         self.pause_duration = 3.0
         self.is_finished = False
@@ -75,8 +83,24 @@ class WaypointNavigator:
                 self.phase = "STOP_BEFORE_INSPECT"
                 self._phase_timer = elapsed_time
                 return
+
+            bearing = float(np.arctan2(dy, dx))
+            yaw_err = normalize_angle(bearing - current_yaw)
+
+            # Too far off course to walk out of: turn on the spot first. This
+            # also covers the 180 deg reversals when leaving an inspection site.
+            if abs(yaw_err) > self.realign_tol:
+                self._rotate_in_place(controller, bearing, current_yaw,
+                                      self.turn_tol)
+                return
+
+            # On course: walk, correcting heading proportionally, and slow down
+            # the more the heading is off so corrections stay inside tolerance.
+            yaw_cmd = float(np.clip(self.heading_gain * yaw_err,
+                                    -self.yaw_rate_max, self.yaw_rate_max))
             vx_cmd = float(np.clip(0.6 * dist, 0.28, 0.45))
-            self._send_smoothed_velocity(controller, vx_cmd, 0.0)
+            vx_cmd *= float(max(0.45, np.cos(yaw_err)))
+            self._send_smoothed_velocity(controller, vx_cmd, yaw_cmd)
             return
 
         if self.phase == "STOP_BEFORE_INSPECT":
