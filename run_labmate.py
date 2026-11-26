@@ -21,7 +21,7 @@ from shared.inspection_report import InspectionRun
 
 # Importing this registers the "labmate_inspection" task: the stock k1_walk
 # config with the robot spawned inside the LabMate laboratory scene.
-from shared.task_cfg import TASK_NAME
+from shared.task_cfg import DAMPED_TASK_NAME, TASK_NAME
 
 
 def parse_args(argv=None):
@@ -32,6 +32,11 @@ def parse_args(argv=None):
         help=f"laboratory state to set up before the run "
              f"(default: {scenario_mod.DEFAULT_SCENARIO}; "
              f"available: {', '.join(scenario_mod.available()) or 'none'})")
+    parser.add_argument(
+        "--damping-tweak", action="store_true",
+        help="raise the ankle joint damping above the official K1 deploy gains "
+             "(1.0 -> 2.0). Off by default: the normal run uses the stock "
+             "gains. Provided to A/B the residual foot buzz in simulation.")
     parser.add_argument(
         "--report", type=Path, default=None,
         help="also write the inspection report to this path as JSON")
@@ -45,7 +50,10 @@ def main(argv=None):
     print("  LabMate - Autonomous Laboratory Inspection Patrol")
     print("=" * 72)
 
-    task_cfg = get_task(TASK_NAME)
+    task_cfg = get_task(DAMPED_TASK_NAME if args.damping_tweak else TASK_NAME)
+    if args.damping_tweak:
+        print("Gains: ankle damping raised to 2.0 (--damping-tweak); "
+              "every other PD gain is the official K1 value")
     task_cfg.policy.device = "cpu"
 
     controller = LabMateController(task_cfg)

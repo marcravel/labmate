@@ -50,3 +50,47 @@ class LabMateInspectionTaskCfg(K1WalkTaskCfg):
 
 
 register_task(TASK_NAME, LabMateInspectionTaskCfg())
+
+
+ANKLE_DAMPING = 2.0
+"""Damping applied to the four ankle joints by the ``--damping-tweak`` task.
+
+The stock K1 walk config pairs ankle stiffness ``65.0`` with damping ``1.0``
+(``tasks/locomotion/robots/k1/__init__.py``), which is lightly damped enough to
+leave a visible buzz in the feet and shins in simulation. Raising the damping is
+a deviation from the official deploy gains, so per AGENTS.md section B.4 it is
+authorized only as an opt-in comparison - the default run keeps the official
+numbers untouched, and this task exists to be A/B'd against it.
+
+Only the ankles change. Stiffness, effort limits, every other joint's damping
+and the policy itself are inherited unchanged.
+"""
+
+DAMPED_TASK_NAME = "labmate_inspection_damped"
+
+
+@configclass
+class LabMateInspectionDampedTaskCfg(LabMateInspectionTaskCfg):
+    """The LabMate task with the ankle joints damped harder than stock.
+
+    Opt-in only, via ``run_labmate.py --damping-tweak``.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+        # Indices are taken from joint_names rather than written out, so this
+        # cannot silently damp the wrong joint if the ordering ever changes.
+        damping = list(self.robot.joint_damping)
+        ankles = [i for i, name in enumerate(self.robot.joint_names)
+                  if "ankle" in name]
+        if len(ankles) != 4:
+            raise ValueError(
+                f"expected 4 ankle joints in the K1 config, found {len(ankles)}: "
+                f"{[self.robot.joint_names[i] for i in ankles]}"
+            )
+        for i in ankles:
+            damping[i] = ANKLE_DAMPING
+        self.robot = self.robot.replace(joint_damping=damping)
+
+
+register_task(DAMPED_TASK_NAME, LabMateInspectionDampedTaskCfg())

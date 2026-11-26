@@ -331,7 +331,19 @@ Launching autonomous patrol...
           !! Face velocity monitor reads in range: indicator in alarm
 ```
 
-A full round is 21 waypoints and takes about 172 s of simulated time, which the viewer runs in real time.
+A full round is 21 waypoints and takes about 125 s of simulated time. Wall-clock time is somewhat longer: the MuJoCo loop paces itself with a fixed per-step sleep, so policy inference and physics cost are added on top of it rather than absorbed into it.
+
+#### Gait tuning
+
+The navigator schedules its forward speed on the distance left to the waypoint, cruising at 1.0 m/s on the long corridor legs and easing down to 0.35 m/s on the short station spurs. The earlier fixed 0.28-0.45 m/s band was well below the speed `k1_walk.pt` walks well at, and produced a visibly shuffling gait. The speeds and the command slew limits are constructor arguments of `WaypointNavigator`, not literals in the method bodies, so they can be retuned without touching the state machine.
+
+One opt-in deviation from the official K1 PD gains is available for comparison:
+
+```bash
+python run_labmate.py --damping-tweak    # ankle joint damping 1.0 -> 2.0
+```
+
+The stock config pairs ankle stiffness `65.0` with damping `1.0`, which is lightly damped enough to leave some foot and shin buzz in simulation. The flag is **off by default** — a normal run uses the official gains unchanged — and it alters nothing but the four ankle joints. It exists so the two can be run back to back and judged.
 
 #### Scenarios
 
