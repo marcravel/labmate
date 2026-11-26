@@ -235,6 +235,17 @@ class Station:
     standard: str
     cadence: str
     checks: tuple[Check, ...] = field(default_factory=tuple)
+    target: str = ""
+    """Site the robot should look at, when it is not ``target_<station>``.
+
+    A station usually takes its look-at point from its own name, which is what
+    ``RouteGraph`` assumes. This names one explicitly for the case where a
+    station has been built at a site that was originally something else - the
+    fire extinguisher occupies what was the printer's standing position, so
+    ``target_printer`` points at the printer and not at the extinguisher being
+    inspected. Getting this wrong aims the robot's head, and so its cameras, at
+    the wrong equipment.
+    """
 
     def inspect(self, model, data, sim_time: float = 0.0) -> StationResult:
         return StationResult(
@@ -344,6 +355,8 @@ STATIONS: tuple[Station, ...] = (
         label="Portable fire extinguisher",
         standard="29 CFR 1910.157(e)(2); NFPA 10 4-3.1",
         cadence="monthly (30-day intervals)",
+        # The site is the printer's, the station is the extinguisher's.
+        target="target_printer_extinguisher",
         checks=(
             Present(
                 key="unit_present",
@@ -420,6 +433,10 @@ def validate(model) -> None:
     for station in STATIONS:
         if station.site not in sites:
             problems.append(f"station site absent from model: {station.site}")
+        if station.target and station.target not in sites:
+            problems.append(
+                f"station names a missing look-at site: "
+                f"{station.site} -> {station.target}")
 
     geoms = {model.geom(i).name for i in range(model.ngeom)}
     for station in STATIONS:

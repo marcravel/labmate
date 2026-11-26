@@ -25,3 +25,9 @@ external/
 *.pth
 *.onnx
 datasets/
+
+# Capture assets: rendered stills and video of a round. Regenerate with
+# `python run_labmate.py --capture --video <path>` rather than committing them -
+# a round's video is ~40 MB, and the repository already carries one binary blob
+# it should not (object_recognization/yolov8n.pt, added past the *.pt rule above).
+simulation/captures/

@@ -24,7 +24,7 @@ LabMate is an **application layer** built on top of the official Booster Robotic
 
 - Simulated laboratory environment (workstations, equipment, scene geometry).
 - Workstation inspection logic.
-- Perception subsystem (OpenCV-based sensor processing).
+- Perception subsystem (camera, detection, annotated capture).
 - Backend REST API (FastAPI).
 - Monitoring dashboard (Streamlit).
 - Automated tests.
@@ -47,6 +47,9 @@ flowchart TD
     WN["WaypointNavigator\n(robot_control/waypoint_navigator.py)"]
     VI["velocity_interface.py\nset_velocity / get_robot_pose"]
     HC["head_control.py\naim_at / set_head\n(2 joints the policy ignores)"]
+    CAM["perception/camera.py\nhead camera, 848x480"]
+    DET["perception/detector.py\nGroundTruthDetector\n(segmentation, not YOLO)"]
+    CAP["perception/capture.py\nstills · contact sheet · MP4"]
     VC["VelocityCommand\nlin_vel_x · lin_vel_y · ang_vel_yaw"]
     LP["LocomotionPolicy\n(k1_walk.pt · TorchScript)"]
     OBS["Observation Builder\n69-dim vector × 10-frame history"]
@@ -67,6 +70,10 @@ flowchart TD
     WN -- "aims at target_* site" --> HC
     VI -- "writes" --> VC
     HC -- "2 head joint targets" --> LC
+    MJ -- "rendered frame + segmentation" --> CAM
+    CAM --> DET --> CAP
+    WN -- "on_inspect (composed)" --> CAP
+    INS -- "verdicts to draw, never to decide" --> CAP
     LC -- "policy_step()" --> LP
     VC -- "command_obs" --> OBS
     RD -- "sensor obs" --> OBS
@@ -94,6 +101,8 @@ flowchart TD
 | `LabMateController` → `WaypointNavigator` | Callback: `self.navigator(controller, elapsed)` |
 | `WaypointNavigator` → velocity commands | Direct attribute write via `set_velocity()` |
 | `WaypointNavigator` → head targets | Direct attribute write via `head_control.aim_at()`; applied by `LabMateController.policy_step()` |
+| Navigator → capture | The same `on_inspect(controller, waypoint, elapsed)` callback, composed with `InspectionRun.record` rather than replacing it |
+| Controller → video recorder | Per-step observer via `LabMateController.set_frame_sink(fn)`; observes only |
 | `WaypointNavigator` → inspection | Optional callback: `on_inspect(controller, waypoint, elapsed)`; absent by default |
 | Inspection checks → scene state | Read `mj_model.geom_matid` / `geom_pos` / `geom_rgba` of lab visual geoms |
 | Scenario → scene state | `shared/scenario.py` writes lab visual geoms only, before `run()` |
@@ -214,7 +223,7 @@ All versions verified from the installed `.venv` environment.
 | Booster Deploy | local (unversioned) | Locomotion framework; `MujocoController`, `LocomotionPolicy` |
 | FastAPI | 0.165.0 | Planned backend REST API (installed, not wired) |
 | Streamlit | 1.67.0 | Planned dashboard UI (installed, not wired) |
-| OpenCV (`opencv-python`) | 4.11.0.86 | Planned perception (installed, not wired) |
+| OpenCV (`opencv-python`) | 4.11.0.86 | Perception: frame annotation, contact sheet, MP4 writing |
 | PyYAML | 6.0.4 | Available; not currently used by LabMate |
 | ONNX Runtime | — | Optional; needed only for `.onnx` policy checkpoints |
 
@@ -348,6 +357,22 @@ python run_labmate.py --damping-tweak    # ankle joint damping 1.0 -> 2.0
 ```
 
 The stock config pairs ankle stiffness `65.0` with damping `1.0`, which is lightly damped enough to leave some foot and shin buzz in simulation. The flag is **off by default** — a normal run uses the official gains unchanged — and it alters nothing but the four ankle joints. It exists so the two can be run back to back and judged.
+
+#### Seeing what it inspects
+
+At each station the robot aims its head - and so the cameras mounted on it - at the middle of the geoms that station's checks read, and the run can record what it sees:
+
+```bash
+python run_labmate.py --capture                     # an annotated still per station
+python run_labmate.py --capture --video round.mp4   # and the whole round as video
+python run_labmate.py --capture --exit-when-done    # close when the round ends, for unattended runs
+```
+
+Stills, a contact sheet and a manifest land in `simulation/captures/<scenario>/`. Rendering costs about 2.7 ms a frame, roughly 7% of a policy step at the video's every-second-step rate, so it does not disturb the walking policy.
+
+**What the detector is.** `GroundTruthDetector` resolves each pixel to the geom that painted it, using MuJoCo's segmentation buffer, and reports the bounding box of the geoms the station's checks read. Occlusion, perspective and visibility are genuine - equipment behind a bench is not detected, and a geom a scenario has hidden is not detected - but the identities come from the simulator, not from recognition. **It is not YOLO and not a learned model**, and every frame says so in its corner. `perception/detector.py` defines the `Detector` protocol a learned detector would satisfy; `YoloDetector` is written against it and deliberately left unwired, because the available weights are stock COCO and COCO contains none of this laboratory's inspectable state.
+
+Frames also mark a check `NOT IN VIEW` when none of its geoms are visible. That is honest rather than tidy: three of the nineteen state geoms sit above the head's gaze ceiling (it looks up 16°, from an eye 0.80 m off the floor), and a real inspection camera would have the same problem from the same standing position.
 
 #### How the round avoids needless movement
 
@@ -512,12 +537,13 @@ Do not call `policy.inference()`, `ctrl_step()`, or write to `robot.data` from a
 | Waypoint navigator | ✅ Implemented | `WaypointNavigator`: closed-loop heading control during approach, distance-scheduled speed, position + yaw tolerance, inspection pause, head aiming at stations, reversing out of spurs. |
 | Navigator ↔ controller integration | ✅ Implemented | Callback pattern wired in `run_labmate.py`. |
 | Shared config | ✅ Implemented | `shared/task_cfg.py` (task override), `shared/inspection.py` (checklist schema), `shared/scenario.py`, `shared/inspection_report.py`. |
-| Automated tests | ✅ Implemented | `tests/check_scene.py`, `tests/test_route_graph.py`, `tests/test_inspection.py`. Standalone scripts, no pytest. |
-| Camera / image acquisition | ⬜ Planned | No `<camera>` exists in any MJCF. The K1 head carries empty mount frames only. Checks currently read geom state directly, not pixels. |
+| Automated tests | ✅ Implemented | `tests/check_scene.py`, `test_route_graph.py`, `test_inspection.py`, `test_navigation.py`, `test_perception.py`. Standalone scripts, no pytest. |
+| Camera / image acquisition | ✅ Implemented | `perception/camera.py` renders 848×480 from the head at ~2.7 ms/frame. Still no `<camera>` in any MJCF — the camera is built from the head's live pose, so the robot model is untouched. |
 | Inspection logic | ✅ Implemented | `shared/inspection.py`: 6 stations, 14 checks, read from the simulation's geom state. Verdicts PASS/ADVISORY/FINDING/CRITICAL. One station — the portable fire extinguisher — is governed by federal regulation (29 CFR 1910.157(e)(2), NFPA 10) rather than local policy. |
 | Scenario system | ✅ Implemented | `shared/scenario.py` + `simulation/scenarios/*.json`. Arranges lab state; refuses robot and collision geoms. |
 | Inspection reporting | ✅ Implemented | `shared/inspection_report.py`: per-station verdicts, round summary, action list, JSON export via `--report`. |
-| Perception subsystem | ⬜ Planned | `perception/` is empty. OpenCV is installed but unused. |
+| Perception subsystem | ✅ Implemented (ground truth, not learned) | `perception/`: head camera, `Detector` protocol, `GroundTruthDetector` reading MuJoCo's segmentation buffer, frame annotation, per-station stills and round video. **It is not YOLO and not a learned model** — it resolves pixels to the geom that painted them. Occlusion and visibility are genuine; the identities come from the simulator. |
+| Detector-backed verdicts | ⬜ Planned | Verdicts still come from `shared/inspection.py` reading the model. Perception observes and never decides, so a camera failure costs pictures only. |
 | Backend API | ⬜ Planned | `backend/` is empty. FastAPI is installed but unused. |
 | Dashboard UI | ⬜ Planned | `dashboard/` is empty. Streamlit is installed but unused. |
 | Dependency declarations | ⚠ Missing | No `requirements.txt` or `pyproject.toml` at the LabMate root. |

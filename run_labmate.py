@@ -38,6 +38,20 @@ def parse_args(argv=None):
              "(1.0 -> 2.0). Off by default: the normal run uses the stock "
              "gains. Provided to A/B the residual foot buzz in simulation.")
     parser.add_argument(
+        "--capture", action="store_true",
+        help="save an annotated head-camera still at each station, plus a "
+             "contact sheet and a manifest, under simulation/captures/")
+    parser.add_argument(
+        "--video", type=Path, default=None,
+        help="also record the head-camera feed for the whole round to this "
+             "path as an MP4")
+    parser.add_argument(
+        "--exit-when-done", action="store_true",
+        help="close the simulation as soon as the round finishes, instead of "
+             "leaving the viewer open. Needed to produce capture assets "
+             "unattended: the report, contact sheet and video are written when "
+             "the run ends.")
+    parser.add_argument(
         "--report", type=Path, default=None,
         help="also write the inspection report to this path as JSON")
     return parser.parse_args(argv)
@@ -82,8 +96,34 @@ def main(argv=None):
                            scenario_title=plan.title,
                            panel=plan.panel_readings)
 
-    navigator = WaypointNavigator(route, on_inspect=report.record)
-    controller.set_navigator(navigator.update)
+    # Perception observes; it never decides. The checklist still reads the
+    # simulation, so a camera failure costs pictures and nothing else.
+    capture = recorder = None
+    on_inspect = report.record
+    if args.capture or args.video is not None:
+        from perception.capture import RoundRecorder, StationCapture
+        if args.capture:
+            capture = StationCapture(controller.mj_model, scenario=plan.name)
+            def on_inspect(ctl, wp, t, _record=report.record, _cap=capture):
+                result = _record(ctl, wp, t)
+                _cap.on_inspect(ctl, wp, t)
+                return result
+        if args.video is not None:
+            recorder = RoundRecorder(args.video, controller.mj_model)
+            controller.set_frame_sink(recorder.on_step)
+        print(f"Perception: {'stills ' if capture else ''}"
+              f"{'video ' if recorder else ''}"
+              f"(detector: simulation ground truth, not a learned model)")
+
+    navigator = WaypointNavigator(route, on_inspect=on_inspect)
+
+    update = navigator.update
+    if args.exit_when_done:
+        def update(ctl, elapsed, _update=navigator.update, _nav=navigator):
+            _update(ctl, elapsed)
+            if _nav.is_finished:
+                ctl.request_stop()
+    controller.set_navigator(update)
 
     stations = [wp["name"] for wp in route if wp["inspect"]]
     print(f"Route: {len(route)} waypoints, {len(stations)} inspection stations")
@@ -95,6 +135,15 @@ def main(argv=None):
     try:
         controller.run()
     finally:
+        if capture is not None:
+            for path in capture.finish():
+                print(f"capture written to {path}")
+            capture.close()
+        if recorder is not None:
+            written = recorder.close()
+            print(f"video written to {written}" if written
+                  else "no video frames were recorded")
+
         # Print whatever was inspected even if the run was interrupted or the
         # safety fallback stopped the controller part-way round.
         if report.results:

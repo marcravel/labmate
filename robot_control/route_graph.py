@@ -25,7 +25,7 @@ from collections import deque
 
 import numpy as np
 
-from shared.inspection import STATION_ORDER
+from shared.inspection import BY_SITE, STATION_ORDER
 
 NAV_PREFIX = "nav_"
 INSPECT_PREFIX = "inspect_"
@@ -123,14 +123,43 @@ class RouteGraph:
 
     @staticmethod
     def _target_for(mj_model, node_name):
-        """``[x, y, z]`` of the ``target_*`` site for a station, or ``None``.
+        """``[x, y, z]`` the robot should look at from this node, or ``None``.
 
-        A corridor node has no target, and a station is not required to declare
-        one - the head simply keeps its neutral gaze if it does not.
+        A station looks at the middle of what it checks. The geoms its checks
+        read are the only things it is there to observe, so pointing the head -
+        and therefore the cameras - at their centre puts the inspected equipment
+        in the middle of the picture, and keeps the aim correct by construction
+        as the checklist changes.
+
+        That replaces taking the point from the station's own name. The
+        ``target_*`` sites are hand-authored and can go stale: ``target_printer``
+        still points at the printer, while the station standing there now
+        inspects a fire extinguisher a metre to the side. Aiming at it pointed
+        the robot's head at the wrong equipment entirely.
+
+        A station may still name a site explicitly through ``Station.target``,
+        for when the centre of the checked geoms is not the thing to look at -
+        the extinguisher's own checks average its body with an obstruction on
+        the floor, which drags the aim downwards.
+
+        A corridor node has no target, and neither does an ``inspect_*`` site
+        with no station on the checklist; the head keeps its neutral gaze.
         """
         if not node_name.startswith(INSPECT_PREFIX):
             return None
-        wanted = TARGET_PREFIX + node_name[len(INSPECT_PREFIX):]
+
+        station = BY_SITE.get(node_name)
+        if station is not None and not station.target:
+            geoms = tuple(dict.fromkeys(
+                g for check in station.checks for g in check.geoms()))
+            if geoms:
+                # Lab bodies are static and declared at the origin, so a geom's
+                # model position is already its world position.
+                centre = np.mean([mj_model.geom(g).pos for g in geoms], axis=0)
+                return [float(v) for v in centre]
+
+        wanted = (station.target if station is not None and station.target
+                  else TARGET_PREFIX + node_name[len(INSPECT_PREFIX):])
         for i in range(mj_model.nsite):
             if mj_model.site(i).name == wanted:
                 return [float(v) for v in mj_model.site(i).pos]

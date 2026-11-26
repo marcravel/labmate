@@ -25,6 +25,10 @@ The working system consists of these custom files on top of Booster Deploy:
 | `robot_control/labmate_controller.py` | Controller subclass. Hook points only. |
 | `robot_control/velocity_interface.py` | The only sanctioned path for velocity commands. |
 | `robot_control/head_control.py` | The only sanctioned path for head targets. Aiming, limits, droop trim. |
+| `perception/camera.py` | Renders the scene from the robot's head. No MJCF camera exists; it builds one. |
+| `perception/detector.py` | `Detection`, the `Detector` protocol, and the ground-truth detector. |
+| `perception/overlay.py` | Draws detections and verdicts onto a frame. Presentation only. |
+| `perception/capture.py` | Per-station stills, contact sheet, manifest, and the round video. |
 | `robot_control/waypoint_navigator.py` | Patrol state machine. |
 | `robot_control/route_graph.py` | Navigation graph read from the MJCF. Owns `ROUTE_EDGES`. |
 | `shared/task_cfg.py` | Registers `labmate_inspection`; overrides `robot.mjcf_path`. |
@@ -38,6 +42,7 @@ The working system consists of these custom files on top of Booster Deploy:
 | `tests/test_route_graph.py` | Route planning stays on validated edges. |
 | `tests/test_inspection.py` | Checklist matches the scene; every check can pass and fail. |
 | `tests/test_navigation.py` | Head can reach every station; reversing out only ever retraces a swept edge. |
+| `tests/test_perception.py` | Camera aim, scaffolding hidden, detections are objects not edge pixels. Skips without GL. |
 
 `backend/`, `dashboard/`, `perception/`, `simulation/models/` are still empty. Do not assume any planned module exists — verify first.
 
@@ -73,6 +78,30 @@ These constraints must not be violated under any circumstances.
 22. **Do not restore the body squaring up to face a station.** It was measured as movement-neutral - the degrees reappear in the departure turn - and it is what makes `WaypointNavigator`'s `BACK_OUT` phase safe. Reversing out of a spur is only a retrace of an edge `tests/check_scene.py` has swept *because* the body is still on the heading it arrived on. Turn the body to face a station again and the reverse leaves the swept corridor. `tests/test_navigation.py` guards the retrace condition; do not weaken it.
 
 23. **A station needs a `target_*` site to be aimed at.** `RouteGraph` carries it onto the waypoint and the navigator aims the head at it. A station without one falls back to squaring the body up, which forfeits constraint 22. Add the site in the same change as the station.
+
+24. **Perception observes; it never decides.** No verdict, route or velocity
+    command may depend on a detector. `shared/inspection.py` reads the
+    simulation directly and stays the only thing that judges a station, so a
+    camera failure costs pictures and nothing else - which is why
+    `StationCapture` and `RoundRecorder` swallow their own exceptions rather
+    than ending a patrol. This is the governing constraint from the brief. Do
+    not wire a detection into a `Check`.
+
+25. **Every rendered frame must name its detector.** `perception/overlay.py`
+    stamps the detector's own `name` on the picture. The ground-truth detector
+    is not YOLO and not a learned model: it resolves pixels to the geom that
+    painted them. This footage is shown next to real camera footage, so a frame
+    that does not say which it is becomes a claim nobody checked. Do not remove
+    the stamp, and do not give the ground-truth detector a fabricated
+    confidence score.
+
+26. **A station looks at what it checks.** `RouteGraph._target_for` aims at the
+    centre of the geoms a station's checks read, not at the `target_*` site
+    named after the station. Those sites are hand-authored and go stale:
+    `target_printer` still points at the printer, while the station standing
+    there inspects a fire extinguisher a metre away, so the robot aimed its
+    cameras at the wrong equipment. Override with `Station.target` only when the
+    centre of the checked geoms is genuinely not the thing to look at.
 
 ---
 
@@ -121,7 +150,14 @@ This table identifies the actual file, class, and function responsible for each 
 | **Read robot pose** | `robot_control/velocity_interface.py` | `get_robot_pose(controller)` | Returns `(pos_np[3], quat_np[4])` from `robot.data.root_pos_w / root_quat_w` |
 | **Head aiming** | `robot_control/head_control.py` | `aim_at()` / `set_head()` / `center_head()` | Limits read from the model; `YAW_MARGIN=0.10`, `PITCH_MARGIN=0.03`. Returns the yaw residual the head cannot cover. |
 | **Head target write** | `robot_control/head_control.py` | `apply_head_target()` | Called by `LabMateController.policy_step()` on the policy's own output. `MAX_RATE=0.03 rad/step`. |
-| **Station look-at point** | `robot_control/route_graph.py` | `RouteGraph._target_for()` | Reads the `target_*` site onto the waypoint's `target` key. |
+| **Station look-at point** | `robot_control/route_graph.py` | `RouteGraph._target_for()` | Centre of the geoms the station's checks read; `Station.target` overrides. |
+| **Head camera** | `perception/camera.py` | `HeadCamera.frame()` / `segmentation()` | 848x480. Builds an `MjvCamera` from the head pose; no MJCF camera. |
+| **Detection** | `perception/detector.py` | `GroundTruthDetector.detect()` | Largest connected blob per geom in the segmentation buffer. |
+| **Detector interface** | `perception/detector.py` | `Detector` protocol, `Detection` | What a learned detector must satisfy to drop in. |
+| **Frame annotation** | `perception/overlay.py` | `annotate()` / `contact_sheet()` | Boxes, verdicts, and the detector-source stamp. |
+| **Capture** | `perception/capture.py` | `StationCapture.on_inspect()`, `RoundRecorder.on_step()` | Writes under `simulation/captures/<scenario>/`. |
+| **Per-step observer hook** | `robot_control/labmate_controller.py` | `set_frame_sink()` | Called each policy step with the controller. Observers only. |
+| **Clean shutdown** | `robot_control/labmate_controller.py` | `request_stop()` | Ends the run after the current step, so `--exit-when-done` can write assets. |
 | **Reverse out of a spur** | `robot_control/waypoint_navigator.py` | `_can_back_out()`, `BACK_OUT` phase | `back_out_speed=0.25`, `back_out_max_dist=1.3`, `back_out_min_angle=2.4`. Requires the next waypoint to be the one just left. |
 | **Waypoint patrol logic** | `robot_control/waypoint_navigator.py` | `WaypointNavigator.update(controller, elapsed)` | `pos_tol=0.25 m`, `yaw_tol=0.20 rad`, `pause_duration=3.0 s` |
 | **Approach heading control** | `robot_control/waypoint_navigator.py` | `WaypointNavigator.update()`, APPROACH phase | `heading_gain=1.1`, `realign_tol=0.35 rad`, `yaw_rate_max=0.45 rad/s`. Required: without it the robot walks off course and never recovers. |
@@ -226,6 +262,9 @@ robot_control/labmate_controller.py   ← Hook points only. Add new hooks cautio
 robot_control/velocity_interface.py   ← Add helper functions. Do not change existing ones.
 robot_control/head_control.py         ← Head targets only. Joint limits are read from the
                                         model; do not hard-code them here.
+perception/                           ← Camera, detector, overlay, capture. May read the
+                                        simulation and the checklist; may not write a
+                                        verdict, a route or a velocity command.
 robot_control/waypoint_navigator.py   ← Extend navigation logic. Keep callable signature.
 robot_control/route_graph.py          ← Add nodes/edges to match the MJCF. ROUTE_EDGES is
                                         imported by tests/check_scene.py — keep them in sync.
