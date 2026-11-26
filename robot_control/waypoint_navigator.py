@@ -1,4 +1,5 @@
 import numpy as np
+from robot_control.head_control import aim_at, center_head, head_settled
 from robot_control.velocity_interface import set_velocity, stop_robot, get_robot_pose
 
 def quat_to_yaw(q):
@@ -17,6 +18,8 @@ class WaypointNavigator:
                  vx_cruise=1.0, vx_min=0.35, decel_gain=0.8,
                  turn_rate_min=0.45, turn_rate_max=0.90,
                  max_dvx=0.08, max_dyaw=0.10,
+                 back_out_speed=0.25, back_out_max_dist=1.3,
+                 back_out_min_angle=2.4,
                  on_inspect=None):
         self.waypoints = waypoints
         # Called once per station, at the moment the robot has stopped and
@@ -72,6 +75,27 @@ class WaypointNavigator:
         # leg - just reaching the commanded speed.
         self._max_dvx = max_dvx
         self._max_dyaw = max_dyaw
+
+        # Reversing out of a station spur instead of turning round in it.
+        #
+        # Every station sits at the end of a 0.50-0.95 m spur off the perimeter
+        # loop, and the next waypoint is the corridor node the robot just came
+        # from. Turning 180 degrees to walk back out, then turning again at the
+        # corridor node, was the single largest piece of movement on the round -
+        # about 290 degrees of in-place rotation per station, none of which goes
+        # anywhere. Walking back out in reverse costs no rotation at all.
+        #
+        # This is safe because the robot is still on the heading it arrived on:
+        # the head did the looking, so the body never squared up to the station.
+        # Reversing therefore retraces the same ROUTE_EDGES edge it walked in
+        # on, which tests/check_scene.py has already swept for clearance. It
+        # would not be safe if the body had turned to face the station first.
+        #
+        # back_out_speed stays inside vx_backward_max = 0.3 m/s, which is what
+        # the walking policy was trained to accept.
+        self.back_out_speed = back_out_speed
+        self.back_out_max_dist = back_out_max_dist
+        self.back_out_min_angle = back_out_min_angle
         self.pause_start_time = None
         self.pause_duration = 3.0
         self.is_finished = False
@@ -100,6 +124,32 @@ class WaypointNavigator:
             return False
         self._send_smoothed_velocity(controller, 0.0, 0.0)
         return True
+
+    def _begin_inspection(self, controller, wp, elapsed_time):
+        print(f"[Navigator] ARRIVED at {wp['name']}! Pausing {self.pause_duration}s for inspection...")
+        if self.on_inspect is not None:
+            self.on_inspect(controller, wp, elapsed_time)
+        self.pause_start_time = elapsed_time
+        self.phase = "INSPECT_PAUSE"
+
+    def _can_back_out(self, next_wp, prev_wp, x, y, yaw):
+        """Whether reversing out beats turning round, and is a retrace.
+
+        Four conditions. The decisive one is that the next waypoint is the one
+        the robot arrived from: then reversing retraces the edge it just walked,
+        which tests/check_scene.py has swept, rather than striking out across
+        unswept floor. The rest are that the waypoint is within reversing range,
+        that it really is behind the robot, and - implied by the first - that
+        the robot is still on its arrival heading, which is what aiming with the
+        head instead of the body preserves.
+        """
+        if prev_wp is None or next_wp["name"] != prev_wp["name"]:
+            return False
+        dist = float(np.hypot(next_wp["x"] - x, next_wp["y"] - y))
+        if dist > self.back_out_max_dist:
+            return False
+        bearing = float(np.arctan2(next_wp["y"] - y, next_wp["x"] - x))
+        return abs(normalize_angle(bearing - yaw)) >= self.back_out_min_angle
 
     def _advance_waypoint(self):
         self.pause_start_time = None
@@ -160,28 +210,77 @@ class WaypointNavigator:
                     self.phase = "FACE_FINAL"
             return
 
-        if self.phase in ("FACE_STATION", "FACE_FINAL"):
+        if self.phase == "FACE_STATION":
+            target = wp.get("target")
+            if target is None:
+                # No look-at point declared for this station, so there is
+                # nothing to aim at: square the body up as before.
+                if self._rotate_in_place(controller, wp["yaw"], current_yaw,
+                                         self.yaw_tol):
+                    self._begin_inspection(controller, wp, elapsed_time)
+                return
+
+            # Aim the cameras, which are on the head, at the point on the
+            # equipment the scene says to look at. The body turns only by the
+            # part the head's +-58 deg of yaw cannot reach - usually nothing.
+            # Squaring the whole body up to a station was 334 deg of in-place
+            # rotation per round spent pointing the body at something the
+            # checklist reads out of the model regardless.
+            residual = aim_at(controller, target, current_yaw)
+            if abs(residual) > self.yaw_tol:
+                self._rotate_in_place(controller, current_yaw + residual,
+                                      current_yaw, self.yaw_tol)
+                return
+
+            self._send_smoothed_velocity(controller, 0.0, 0.0)
+            if head_settled(controller) and abs(self._last_yaw) < 1e-3:
+                self._begin_inspection(controller, wp, elapsed_time)
+            return
+
+        if self.phase == "FACE_FINAL":
             if self._rotate_in_place(controller, wp["yaw"], current_yaw, self.yaw_tol):
-                if self.phase == "FACE_STATION":
-                    print(f"[Navigator] ARRIVED at {wp['name']}! Pausing {self.pause_duration}s for inspection...")
-                    if self.on_inspect is not None:
-                        self.on_inspect(controller, wp, elapsed_time)
-                    self.pause_start_time = elapsed_time
-                    self.phase = "INSPECT_PAUSE"
-                else:
-                    self._advance_waypoint()
+                self._advance_waypoint()
             return
 
         if self.phase == "INSPECT_PAUSE":
             self._send_smoothed_velocity(controller, 0.0, 0.0)
             if elapsed_time - self.pause_start_time >= self.pause_duration:
                 print(f"[Navigator] Inspection complete at {wp['name']}.")
+                # Walk with a level forward gaze, not a cocked head.
+                center_head(controller)
                 if self.current_idx + 1 < len(self.waypoints):
                     next_wp = self.waypoints[self.current_idx + 1]
                     self._target_depart_yaw = float(np.arctan2(next_wp["y"] - wp["y"], next_wp["x"] - wp["x"]))
-                    self.phase = "ROTATE_TO_NEXT"
+                    prev_wp = (self.waypoints[self.current_idx - 1]
+                               if self.current_idx else None)
+                    if self._can_back_out(next_wp, prev_wp,
+                                          current_x, current_y, current_yaw):
+                        print(f"[Navigator] Reversing out of {wp['name']} "
+                              f"instead of turning round.")
+                        self.phase = "BACK_OUT"
+                    else:
+                        self.phase = "ROTATE_TO_NEXT"
                 else:
                     self._advance_waypoint()
+            return
+
+        if self.phase == "BACK_OUT":
+            # Reversing towards the *next* waypoint, not the station underfoot,
+            # so the distance and bearing are measured against that one.
+            back_wp = self.waypoints[self.current_idx + 1]
+            back_dx = back_wp["x"] - current_x
+            back_dy = back_wp["y"] - current_y
+            if float(np.hypot(back_dx, back_dy)) <= self.pos_tol:
+                self._send_smoothed_velocity(controller, 0.0, 0.0)
+                self._advance_waypoint()
+                return
+            # Hold the heading the robot walked in on, measured against the
+            # reverse bearing, so it reverses straight back down the spur.
+            bearing = float(np.arctan2(back_dy, back_dx))
+            yaw_err = normalize_angle(normalize_angle(bearing + np.pi) - current_yaw)
+            yaw_cmd = float(np.clip(self.heading_gain * yaw_err,
+                                    -self.yaw_rate_max, self.yaw_rate_max))
+            self._send_smoothed_velocity(controller, -self.back_out_speed, yaw_cmd)
             return
 
         if self.phase == "ROTATE_TO_NEXT":

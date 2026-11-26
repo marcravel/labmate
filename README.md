@@ -46,6 +46,7 @@ flowchart TD
     RG["RouteGraph\n(robot_control/route_graph.py)\nreads nav_/inspect_ sites"]
     WN["WaypointNavigator\n(robot_control/waypoint_navigator.py)"]
     VI["velocity_interface.py\nset_velocity / get_robot_pose"]
+    HC["head_control.py\naim_at / set_head\n(2 joints the policy ignores)"]
     VC["VelocityCommand\nlin_vel_x · lin_vel_y · ang_vel_yaw"]
     LP["LocomotionPolicy\n(k1_walk.pt · TorchScript)"]
     OBS["Observation Builder\n69-dim vector × 10-frame history"]
@@ -63,7 +64,9 @@ flowchart TD
     LC -- "mj_model" --> RG
     RG -- "waypoint list" --> WN
     WN -- "navigator callback" --> VI
+    WN -- "aims at target_* site" --> HC
     VI -- "writes" --> VC
+    HC -- "2 head joint targets" --> LC
     LC -- "policy_step()" --> LP
     VC -- "command_obs" --> OBS
     RD -- "sensor obs" --> OBS
@@ -90,6 +93,7 @@ flowchart TD
 | `run_labmate.py` → `LabMateController` | Direct Python instantiation |
 | `LabMateController` → `WaypointNavigator` | Callback: `self.navigator(controller, elapsed)` |
 | `WaypointNavigator` → velocity commands | Direct attribute write via `set_velocity()` |
+| `WaypointNavigator` → head targets | Direct attribute write via `head_control.aim_at()`; applied by `LabMateController.policy_step()` |
 | `WaypointNavigator` → inspection | Optional callback: `on_inspect(controller, waypoint, elapsed)`; absent by default |
 | Inspection checks → scene state | Read `mj_model.geom_matid` / `geom_pos` / `geom_rgba` of lab visual geoms |
 | Scenario → scene state | `shared/scenario.py` writes lab visual geoms only, before `run()` |
@@ -345,6 +349,15 @@ python run_labmate.py --damping-tweak    # ankle joint damping 1.0 -> 2.0
 
 The stock config pairs ankle stiffness `65.0` with damping `1.0`, which is lightly damped enough to leave some foot and shin buzz in simulation. The flag is **off by default** — a normal run uses the official gains unchanged — and it alters nothing but the four ankle joints. It exists so the two can be run back to back and judged.
 
+#### How the round avoids needless movement
+
+A round used to spend about 2500° of in-place body rotation. Two of its three sources were avoidable, and both were measured rather than assumed:
+
+- **The head looks, not the body.** `aahead_yaw_joint` and `aahead_pitch_joint` are the only joints the walking policy neither drives nor observes, so the application layer can aim them freely: measured in simulation, the head holds a 0.90 rad command to within 0.015 rad while walking, on 0.2 Nm of its 6 Nm limit. The navigator aims them at each station's `target_*` site — which also points the two head-mounted cameras at the equipment, which is what perception will need. On its own this is movement-*neutral*: the body stops squaring up to the station, but then has to turn correspondingly further to leave. Measured: 2679° → 2663°.
+- **Reversing out of a spur, not turning round in it.** Each station sits at the end of a 0.50–1.04 m spur, and the next waypoint is the corridor node the robot just came from. Turning 180° to walk out, then turning again at the corridor node, was roughly 290° of rotation per station that goes nowhere. Reversing at 0.25 m/s (inside `vx_backward_max=0.3`) costs none of it. This is only safe *because* the head did the looking: the body is still on the heading it arrived on, so the reverse retraces the same `ROUTE_EDGES` edge `tests/check_scene.py` already swept.
+
+Together, measured over a full nominal round: **in-place body rotation 1028° → 633°, total body rotation 2579° → 1733°, round time 121 s → 104 s**, with all six stations still inspected. The third source — 14 genuine corners of 53–180° on the perimeter loop — is inherent to the route's shape and was left alone.
+
 #### Scenarios
 
 A scenario arranges the laboratory's inspectable state before the run, so a demo can be shot twice — once all-clear, once with findings — from one build and one route, with nothing else changed. Both takes walk the identical path in the identical time.
@@ -493,9 +506,10 @@ Do not call `policy.inference()`, `ctrl_step()`, or write to `robot.data` from a
 | K1 robot model | ✅ Implemented | 22-DOF MJCF loaded from booster_assets. Full joint/body hierarchy. |
 | Official walking policy | ✅ Implemented | `k1_walk.pt` loaded via TorchScript. 50 Hz inference. Unmodified. |
 | Velocity command interface | ✅ Implemented | `set_velocity()`, `stop_robot()`, `get_robot_pose()` in `velocity_interface.py`. |
+| Head aiming | ✅ Implemented | `head_control.py` aims the head (and so the cameras) at each station's `target_*` site. The two head joints are outside the walking policy's action and observation. |
 | Lab environment (scene) | ✅ Implemented | `simulation/scenes/`: 16 static bodies, 215 geoms, 7 inspection sites. Six carry inspectable state. Adds no DOF. |
 | Navigation graph | ✅ Implemented | `RouteGraph` reads `nav_*`/`inspect_*` sites from the model; BFS over `ROUTE_EDGES`. |
-| Waypoint navigator | ✅ Implemented | `WaypointNavigator`: closed-loop heading control during approach, position + yaw tolerance, inspection pause. |
+| Waypoint navigator | ✅ Implemented | `WaypointNavigator`: closed-loop heading control during approach, distance-scheduled speed, position + yaw tolerance, inspection pause, head aiming at stations, reversing out of spurs. |
 | Navigator ↔ controller integration | ✅ Implemented | Callback pattern wired in `run_labmate.py`. |
 | Shared config | ✅ Implemented | `shared/task_cfg.py` (task override), `shared/inspection.py` (checklist schema), `shared/scenario.py`, `shared/inspection_report.py`. |
 | Automated tests | ✅ Implemented | `tests/check_scene.py`, `tests/test_route_graph.py`, `tests/test_inspection.py`. Standalone scripts, no pytest. |

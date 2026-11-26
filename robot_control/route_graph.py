@@ -29,6 +29,7 @@ from shared.inspection import STATION_ORDER
 
 NAV_PREFIX = "nav_"
 INSPECT_PREFIX = "inspect_"
+TARGET_PREFIX = "target_"
 
 _LOOP = ["west", "northwest", "northeast", "east", "southeast", "southwest", "west"]
 
@@ -100,6 +101,11 @@ class RouteGraph:
                 "y": float(site.pos[1]),
                 "yaw": quat_to_yaw(site.quat),
                 "inspect": name.startswith(INSPECT_PREFIX),
+                # The point on the equipment to look at, if the scene declares
+                # one. These target_* sites were already in the model, written
+                # down as "used later by perception"; the head aims at them now,
+                # which is the same job a camera will do from the same place.
+                "target": self._target_for(mj_model, name),
             }
 
         missing = sorted(
@@ -114,6 +120,21 @@ class RouteGraph:
         for a, b in ROUTE_EDGES:
             self._adjacency[a].add(b)
             self._adjacency[b].add(a)
+
+    @staticmethod
+    def _target_for(mj_model, node_name):
+        """``[x, y, z]`` of the ``target_*`` site for a station, or ``None``.
+
+        A corridor node has no target, and a station is not required to declare
+        one - the head simply keeps its neutral gaze if it does not.
+        """
+        if not node_name.startswith(INSPECT_PREFIX):
+            return None
+        wanted = TARGET_PREFIX + node_name[len(INSPECT_PREFIX):]
+        for i in range(mj_model.nsite):
+            if mj_model.site(i).name == wanted:
+                return [float(v) for v in mj_model.site(i).pos]
+        return None
 
     # -- introspection ----------------------------------------------------
 

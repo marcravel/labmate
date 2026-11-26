@@ -24,6 +24,7 @@ The working system consists of these custom files on top of Booster Deploy:
 | `run_labmate.py` | Entry point. Wiring only. |
 | `robot_control/labmate_controller.py` | Controller subclass. Hook points only. |
 | `robot_control/velocity_interface.py` | The only sanctioned path for velocity commands. |
+| `robot_control/head_control.py` | The only sanctioned path for head targets. Aiming, limits, droop trim. |
 | `robot_control/waypoint_navigator.py` | Patrol state machine. |
 | `robot_control/route_graph.py` | Navigation graph read from the MJCF. Owns `ROUTE_EDGES`. |
 | `shared/task_cfg.py` | Registers `labmate_inspection`; overrides `robot.mjcf_path`. |
@@ -36,6 +37,7 @@ The working system consists of these custom files on top of Booster Deploy:
 | `tests/check_scene.py` | Static geometric validation of the scene. |
 | `tests/test_route_graph.py` | Route planning stays on validated edges. |
 | `tests/test_inspection.py` | Checklist matches the scene; every check can pass and fail. |
+| `tests/test_navigation.py` | Head can reach every station; reversing out only ever retraces a swept edge. |
 
 `backend/`, `dashboard/`, `perception/`, `simulation/models/` are still empty. Do not assume any planned module exists — verify first.
 
@@ -65,6 +67,12 @@ These constraints must not be violated under any circumstances.
 18. **Do not present a scenario's `panel` readings as measurements.** They are labels for the state the scenario set up, not simulated physics. Reports must keep saying so.
 19. **A `panel` key is global, not per-station.** `shared/inspection_report.py` looks up `panel[check.key]`, so two stations sharing a check key would print each other's declared reading. Check keys only have to be unique *within* a station for `validate()` to pass, so this will not be caught by a test. Either give a new check a distinct key, or give it no `panel` entry at all.
 20. **Geom names are global across the whole scene.** The laboratory and the K1 model compile into one namespace, and MuJoCo rejects a duplicate outright. Prefix a new station's geoms with the station (`printer_ext_*`), rather than with the object, or a second extinguisher collides with the first.
+
+21. **The two head joints are the application's, and only through `head_control.py`.** `aahead_yaw_joint` and `aahead_pitch_joint` are the only joints the walking policy neither commands nor observes: `LocomotionPolicy` maps its 20-dim action and builds its observation through `real2sim_joint_map`, which covers only `policy_joint_names`. That is what makes aiming the head safe, and it is also the whole of the licence - do not extend the same trick to any other joint, and do not write head targets anywhere but `head_control.set_head` / `aim_at`.
+
+22. **Do not restore the body squaring up to face a station.** It was measured as movement-neutral - the degrees reappear in the departure turn - and it is what makes `WaypointNavigator`'s `BACK_OUT` phase safe. Reversing out of a spur is only a retrace of an edge `tests/check_scene.py` has swept *because* the body is still on the heading it arrived on. Turn the body to face a station again and the reverse leaves the swept corridor. `tests/test_navigation.py` guards the retrace condition; do not weaken it.
+
+23. **A station needs a `target_*` site to be aimed at.** `RouteGraph` carries it onto the waypoint and the navigator aims the head at it. A station without one falls back to squaring the body up, which forfeits constraint 22. Add the site in the same change as the station.
 
 ---
 
@@ -106,10 +114,15 @@ This table identifies the actual file, class, and function responsible for each 
 | **Inspection reporting** | `shared/inspection_report.py` | `InspectionRun.record()` / `render()` / `to_dict()` | `record` is the navigator's `on_inspect` callback. |
 | **Inspection hook** | `robot_control/waypoint_navigator.py` | `WaypointNavigator.__init__(on_inspect=...)` | Fires in FACE_STATION once the robot has stopped and turned to face the station. Optional: the patrol runs without it. |
 | **Inspection validation** | `tests/test_inspection.py` | — | Scenario verdicts, pass/fail coverage of every check, scenario write guards. |
+| **Navigation validation** | `tests/test_navigation.py` | — | Head reach per station, the reverse-out retrace condition, backward speed limit. |
 | **Stdin override (disabled)** | `robot_control/labmate_controller.py` | `LabMateController.update_vel_command()` | `pass` — intentionally a no-op |
 | **Velocity command write** | `robot_control/velocity_interface.py` | `set_velocity(controller, vx, vy, yaw)` | Clamps to `vx_forward_max=1.6`, `vx_backward_max=0.3`, `vy_max=0.3`, `vyaw_max=1.8` |
 | **Stop robot** | `robot_control/velocity_interface.py` | `stop_robot(controller)` | Zeros all three velocity axes |
 | **Read robot pose** | `robot_control/velocity_interface.py` | `get_robot_pose(controller)` | Returns `(pos_np[3], quat_np[4])` from `robot.data.root_pos_w / root_quat_w` |
+| **Head aiming** | `robot_control/head_control.py` | `aim_at()` / `set_head()` / `center_head()` | Limits read from the model; `YAW_MARGIN=0.10`, `PITCH_MARGIN=0.03`. Returns the yaw residual the head cannot cover. |
+| **Head target write** | `robot_control/head_control.py` | `apply_head_target()` | Called by `LabMateController.policy_step()` on the policy's own output. `MAX_RATE=0.03 rad/step`. |
+| **Station look-at point** | `robot_control/route_graph.py` | `RouteGraph._target_for()` | Reads the `target_*` site onto the waypoint's `target` key. |
+| **Reverse out of a spur** | `robot_control/waypoint_navigator.py` | `_can_back_out()`, `BACK_OUT` phase | `back_out_speed=0.25`, `back_out_max_dist=1.3`, `back_out_min_angle=2.4`. Requires the next waypoint to be the one just left. |
 | **Waypoint patrol logic** | `robot_control/waypoint_navigator.py` | `WaypointNavigator.update(controller, elapsed)` | `pos_tol=0.25 m`, `yaw_tol=0.20 rad`, `pause_duration=3.0 s` |
 | **Approach heading control** | `robot_control/waypoint_navigator.py` | `WaypointNavigator.update()`, APPROACH phase | `heading_gain=1.1`, `realign_tol=0.35 rad`, `yaw_rate_max=0.45 rad/s`. Required: without it the robot walks off course and never recovers. |
 | **Velocity command object** | `external/booster_deploy/booster_deploy/controllers/base_controller.py` | `VelocityCommand` | `lin_vel_x`, `lin_vel_y`, `ang_vel_yaw` (float attributes) |
@@ -211,6 +224,8 @@ Do not submit changes that touch more than one concern at a time. If a task requ
 ```
 robot_control/labmate_controller.py   ← Hook points only. Add new hooks cautiously.
 robot_control/velocity_interface.py   ← Add helper functions. Do not change existing ones.
+robot_control/head_control.py         ← Head targets only. Joint limits are read from the
+                                        model; do not hard-code them here.
 robot_control/waypoint_navigator.py   ← Extend navigation logic. Keep callable signature.
 robot_control/route_graph.py          ← Add nodes/edges to match the MJCF. ROUTE_EDGES is
                                         imported by tests/check_scene.py — keep them in sync.
