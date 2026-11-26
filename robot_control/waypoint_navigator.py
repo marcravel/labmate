@@ -13,7 +13,10 @@ def normalize_angle(angle):
 
 class WaypointNavigator:
     def __init__(self, waypoints, pos_tolerance=0.25, yaw_tolerance=0.20,
-                 heading_gain=1.1, realign_tol=0.35, yaw_rate_max=0.45,
+                 heading_gain=1.1, realign_tol=0.35, yaw_rate_max=0.60,
+                 vx_cruise=1.0, vx_min=0.35, decel_gain=0.8,
+                 turn_rate_min=0.45, turn_rate_max=0.90,
+                 max_dvx=0.08, max_dyaw=0.10,
                  on_inspect=None):
         self.waypoints = waypoints
         # Called once per station, at the moment the robot has stopped and
@@ -25,7 +28,12 @@ class WaypointNavigator:
         self.current_idx = 0
         self.pos_tol = pos_tolerance
         self.yaw_tol = yaw_tolerance
-        self.turn_tol = min(0.08, yaw_tolerance)
+        # Exit tolerance for a rotate-in-place. Wider than it was (0.08): the
+        # turn command has a magnitude floor, so it cannot taper all the way to
+        # zero, and a tight tolerance made it chatter on and off at the
+        # boundary. Leaving the turn a little earlier spends that discontinuity
+        # once, and the APPROACH heading controller absorbs the remainder.
+        self.turn_tol = min(0.12, yaw_tolerance)
         # Closed-loop heading control while walking. Without this the APPROACH
         # phase commanded a zero turn rate, so the robot walked on whatever
         # heading it happened to hold and gait drift was never corrected - it
@@ -33,6 +41,37 @@ class WaypointNavigator:
         self.heading_gain = heading_gain
         self.realign_tol = realign_tol
         self.yaw_rate_max = yaw_rate_max
+
+        # Walk at a speed the policy was actually trained for. k1_walk.pt walks
+        # over a band up to vx_forward_max=1.6; the route used to be driven at
+        # 0.28-0.45 m/s, which makes it take tiny shuffling steps that read as a
+        # glitched gait. Driven at 1.0 m/s - verified by hand with a "1 0 0"
+        # command - it takes real strides.
+        #
+        # The speed cannot simply be raised, because the leg lengths on this
+        # route differ by 7x: the northwest-northeast corridor run is 3.6 m,
+        # while the spur to inspect_electronics_a is 0.50 m, of which only
+        # 0.25 m is travelled before pos_tol triggers. So speed is scheduled on
+        # the distance left to run: the corridor legs get the fast gait, the
+        # station spurs stay slow, and arrival is a ramp-down from ~1.25 m out
+        # rather than a step from the old 0.28 m/s floor straight to zero.
+        self.vx_cruise = vx_cruise
+        self.vx_min = vx_min
+        self.decel_gain = decel_gain
+
+        # Turning has the same failure as walking did: a too-low yaw rate makes
+        # the robot shuffle on the spot instead of stepping round.
+        self.turn_rate_min = turn_rate_min
+        self.turn_rate_max = turn_rate_max
+
+        # Slew limit on the commands, applied once per policy step (50 Hz), so
+        # these are 4.0 m/s^2 and 5.0 rad/s^2. This exists to take the edge off
+        # the phase transitions, which all bang the command to zero. It is
+        # deliberately loose: driving the robot by hand with step commands is
+        # smooth, and the old 1.5 m/s^2 limit spent 0.3 s - most of a short
+        # leg - just reaching the commanded speed.
+        self._max_dvx = max_dvx
+        self._max_dyaw = max_dyaw
         self.pause_start_time = None
         self.pause_duration = 3.0
         self.is_finished = False
@@ -43,8 +82,8 @@ class WaypointNavigator:
         self._target_depart_yaw = None
 
     def _send_smoothed_velocity(self, controller, target_vx, target_yaw):
-        max_dvx = 0.03
-        max_dyaw = 0.05
+        max_dvx = self._max_dvx
+        max_dyaw = self._max_dyaw
         vx = self._last_vx + float(np.clip(target_vx - self._last_vx, -max_dvx, max_dvx))
         yaw = self._last_yaw + float(np.clip(target_yaw - self._last_yaw, -max_dyaw, max_dyaw))
         self._last_vx = vx
@@ -54,7 +93,8 @@ class WaypointNavigator:
     def _rotate_in_place(self, controller, target_yaw, current_yaw, tol):
         yaw_err = normalize_angle(target_yaw - current_yaw)
         if abs(yaw_err) > tol:
-            yaw_mag = float(np.clip(abs(yaw_err) * 1.2, 0.35, 0.60))
+            yaw_mag = float(np.clip(abs(yaw_err) * 1.5,
+                                    self.turn_rate_min, self.turn_rate_max))
             yaw_cmd = float(np.sign(yaw_err) * yaw_mag)
             self._send_smoothed_velocity(controller, 0.0, yaw_cmd)
             return False
@@ -105,7 +145,8 @@ class WaypointNavigator:
             # the more the heading is off so corrections stay inside tolerance.
             yaw_cmd = float(np.clip(self.heading_gain * yaw_err,
                                     -self.yaw_rate_max, self.yaw_rate_max))
-            vx_cmd = float(np.clip(0.6 * dist, 0.28, 0.45))
+            vx_cmd = float(np.clip(self.decel_gain * dist,
+                                   self.vx_min, self.vx_cruise))
             vx_cmd *= float(max(0.45, np.cos(yaw_err)))
             self._send_smoothed_velocity(controller, vx_cmd, yaw_cmd)
             return
